@@ -1,0 +1,9 @@
+{
+  "retrieved": "2026-08-28",
+  "sources": [
+    {"id": "rfc9901", "version": "RFC 9901", "url": "https://www.rfc-editor.org/rfc/rfc9901.html", "anchors": ["section-4", "section-4.1.1", "section-4.2", "section-4.2.2", "section-4.2.5", "section-4.2.6", "section-4.3", "section-8", "section-9.11"]},
+    {"id": "swiss-profile", "version": "Swiss Profile for Verifiable Credentials 1.0 (edited 2026-06-22)", "url": "https://swiyu-admin-ch.github.io/specifications/swiss-profile-vc/", "anchors": ["cryptography", "4.1.1", "4.1.2", "4.2.2", "4.2.5", "4.2.6", "4.3", "6.1", "6.3", "8", "3.2.1", "3.2.2.2", "3.2.2.3", "3.2.2.4"]},
+    {"id": "sd-jwt-vc", "version": "SD-JWT VC Internet-Draft 15", "url": "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-sd-jwt-vc-15", "anchors": ["section-3.1", "section-3.2.1", "section-3.2.2"]},
+    {"id": "token-status-list", "version": "Token Status List Internet-Draft 20", "url": "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-20", "anchors": ["section-5.1", "section-6", "section-7.1", "section-8"]}
+  ]
+}

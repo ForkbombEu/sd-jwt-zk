@@ -1,0 +1,140 @@
+{
+  "format": "sd-jwt-zk-fixture-v1",
+  "negative": [
+    {
+      "expected": "reject",
+      "field": "issuer-header-alg",
+      "name": "mutate-issuer-header-alg",
+      "presentation_ascii": "eyJhbGciOiJFUzM4NCIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~"
+    },
+    {
+      "expected": "reject",
+      "field": "issuer-header-typ",
+      "name": "mutate-issuer-header-typ",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~"
+    },
+    {
+      "expected": "reject",
+      "field": "profile-version",
+      "name": "mutate-profile-version",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6OS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~"
+    },
+    {
+      "expected": "reject",
+      "field": "sd-alg",
+      "name": "mutate-sd-alg",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtNTEyIn0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~"
+    },
+    {
+      "expected": "reject",
+      "field": "payload-digest",
+      "name": "mutate-payload-digest",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsiQUxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~"
+    },
+    {
+      "expected": "reject",
+      "field": "disclosure",
+      "name": "mutate-disclosure",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZVA~"
+    },
+    {
+      "expected": "reject",
+      "field": "issuer-jws",
+      "name": "mutate-issuer-jws",
+      "presentation_ascii": "XyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~"
+    },
+    {
+      "expected": "reject",
+      "field": "tilde",
+      "name": "mutate-tilde",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0"
+    },
+    {
+      "expected": "reject",
+      "field": "disclosure-order",
+      "name": "mutate-disclosure-order",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~x"
+    },
+    {
+      "expected": "reject",
+      "field": "sd-hash",
+      "name": "mutate-sd-hash",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~",
+      "provided_sd_hash": "AF7LtaPkYurswlhoVAJMoJvSKAWv5b1F1BK0h4PUSzk"
+    },
+    {
+      "expected": "reject by ES256 verification",
+      "field": "issuer-signature",
+      "name": "mutate-issuer-signature",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.AS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~"
+    },
+    {
+      "expected": "reject by ES256 verification",
+      "field": "issuer-key",
+      "name": "mutate-issuer-key",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~",
+      "provided_issuer_jwk": {
+        "crv": "P-256",
+        "kty": "EC",
+        "x": "5q2hXqnw_b2jpfi3_U2vCLpAXXWm6CSe2LkA-xSGDss",
+        "y": "Vu9a5G8PwM_8Li92vb8llSfXvaaUFPXqn57RrrA08uc"
+      }
+    }
+  ],
+  "positive": [
+    {
+      "disclosures": [
+        "WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0"
+      ],
+      "expected_disclosure_digests": [
+        "rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU"
+      ],
+      "expected_sd_hash": "FF7LtaPkYurswlhoVAJMoJvSKAWv5b1F1BK0h4PUSzk",
+      "holder_jwk": {
+        "crv": "P-256",
+        "kty": "EC",
+        "x": "uNJkR8N_mIF4OiHzsbGdAoPFN9cyGZHN2rTeZS1L_p8",
+        "y": "6p64Zi-F2FKs9RFB8V-EFWC7jrDk8jDP-17zIGy4JXA"
+      },
+      "issuer_jwk": {
+        "crv": "P-256",
+        "kty": "EC",
+        "x": "uNJkR8N_mIF4OiHzsbGdAoPFN9cyGZHN2rTeZS1L_p8",
+        "y": "6p64Zi-F2FKs9RFB8V-EFWC7jrDk8jDP-17zIGy4JXA"
+      },
+      "issuer_jws": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ",
+      "kb_jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImtiK2p3dCJ9.eyJhdWQiOiJodHRwczovL3ZlcmlmaWVyLmV4YW1wbGUiLCJub25jZSI6ImNoYWxsZW5nZS0wMDAxIiwiaWF0IjoxNzc3MzM0NDAwLCJzZF9oYXNoIjoiRkY3THRhUGtZdXJzd2xob1ZBSk1vSnZTS0FXdjViMUYxQkswaDRQVVN6ayJ9.wZm5Q5D-b9stytMg-PFLi62qN4XzYBazkc3fwa5JJcY7k9Ta_YvTWGoQ8KrFKLbyviGJRJsCnN2SNqwiazTlbg",
+      "name": "explicit-sha-256",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsIl9zZF9hbGciOiJzaGEtMjU2In0.RS6qxwyHcY1UIV7JU60XommQaDyhl1NTMyE-EESB6-ViM6WjVNJC56lUFwZLW82dtNMbySOKZBphd8jfRAICBQ~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~",
+      "sd_alg": "sha-256",
+      "signature_note": "Fixed raw JOSE ES256 signatures are independently checked with OpenSSL; this stdlib oracle deterministically checks disclosure and sd_hash bytes."
+    },
+    {
+      "disclosures": [
+        "WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0"
+      ],
+      "expected_disclosure_digests": [
+        "rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU"
+      ],
+      "expected_sd_hash": "yBw6OE7JfNhgGg0darSA9aQVHHblnS-q1eMc-KYW4cY",
+      "holder_jwk": {
+        "crv": "P-256",
+        "kty": "EC",
+        "x": "uNJkR8N_mIF4OiHzsbGdAoPFN9cyGZHN2rTeZS1L_p8",
+        "y": "6p64Zi-F2FKs9RFB8V-EFWC7jrDk8jDP-17zIGy4JXA"
+      },
+      "issuer_jwk": {
+        "crv": "P-256",
+        "kty": "EC",
+        "x": "uNJkR8N_mIF4OiHzsbGdAoPFN9cyGZHN2rTeZS1L_p8",
+        "y": "6p64Zi-F2FKs9RFB8V-EFWC7jrDk8jDP-17zIGy4JXA"
+      },
+      "issuer_jws": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSJ9._wMfQWZndu20SLA-4JUMEIEpNtEaLEvF-ErYT9sjWLLlwAgUeMYAD7fjfwNCSvuJU6eqBXnA_zJF3u5ao9ps9A",
+      "kb_jwt": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImtiK2p3dCJ9.eyJhdWQiOiJodHRwczovL3ZlcmlmaWVyLmV4YW1wbGUiLCJub25jZSI6ImNoYWxsZW5nZS0wMDAxIiwiaWF0IjoxNzc3MzM0NDAwLCJzZF9oYXNoIjoieUJ3Nk9FN0pmTmhnR2cwZGFyU0E5YVFWSEhibG5TLXExZU1jLUtZVzRjWSJ9.0m68RxTDfxewlhvz6qo3GQiJHRozjgnvDvTRodASGFdRD4g92_j42EPlthIRTLRpHUrjCn31sLb2vkAUtJ2tSw",
+      "name": "omitted-default-sha-256",
+      "presentation_ascii": "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ.eyJfc2QiOlsickxFZ2lmWmdPaGdVVUxiT0xlTVZrc1oyQVVJeDF6Z1NzT0pSenFMYWJuVSJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSJ9._wMfQWZndu20SLA-4JUMEIEpNtEaLEvF-ErYT9sjWLLlwAgUeMYAD7fjfwNCSvuJU6eqBXnA_zJF3u5ao9ps9A~WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsdHJ1ZV0~",
+      "sd_alg": "omitted-default-sha-256",
+      "signature_note": "Fixed raw JOSE ES256 signatures are independently checked with OpenSSL; this stdlib oracle deterministically checks disclosure and sd_hash bytes."
+    }
+  ]
+}
