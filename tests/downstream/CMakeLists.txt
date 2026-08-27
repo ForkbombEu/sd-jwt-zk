@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(SDJWTZKDownstream LANGUAGES CXX)
+find_package(SDJWTZK CONFIG REQUIRED)
+add_executable(downstream main.cc)
+target_link_libraries(downstream PRIVATE SDJWTZK::sd-jwt-zk)
