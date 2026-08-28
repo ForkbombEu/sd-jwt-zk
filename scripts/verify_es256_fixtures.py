@@ -14,6 +14,16 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE5q2hXqnw/b2jpfi3/U2vCLpAXXWm
 6CSe2LkA+xSGDstW71rkbw/Az/wuL3a9vyWVJ9e9ppQU9eqfntGusDTy5w==
 -----END PUBLIC KEY-----
 """
+STRING_DISCLOSURE_PEM = b"""-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJl+RmGfWH/k+UmeHbUnLL58NFLxBz6qOzZqP7z/q
+xY5UG5oS7dP/ntyU+UkMvCbzGfDU8cXJHiRtdQfIawr1NQ==
+-----END PUBLIC KEY-----
+"""
+STRING_DISCLOSURE_ISSUER_JWS = (
+    "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ."
+    "eyJfc2QiOlsiRUtEMklOR1JlWkZtQXQ3LXZBbmNlY2VkUVRvb3gzNTlGR1hZR2dZUUJMOCJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSJ9."
+    "FQp4GsBBvr3_xbX1UtKSc7mtcw1ygaZ7Z-suRyHET3oggdcr1KqoyH-LA8Yy8pHr3xGkKrrQCu-7fCAbYrTljg"
+)
 EXPECTED_JWK = {"crv":"P-256", "kty":"EC", "x":"uNJkR8N_mIF4OiHzsbGdAoPFN9cyGZHN2rTeZS1L_p8", "y":"6p64Zi-F2FKs9RFB8V-EFWC7jrDk8jDP-17zIGy4JXA"}
 def raw_to_der(raw):
     def integer(part):
@@ -34,4 +44,6 @@ if __name__ == "__main__":
     for v in vectors["positive"]:
         if v["issuer_jwk"] != EXPECTED_JWK or v["holder_jwk"] != EXPECTED_JWK: raise SystemExit("JWK mismatch")
         if not verify(v["issuer_jws"], PEM) or not verify(v["kb_jwt"], PEM): raise SystemExit("ES256 fixture verification failed: " + v["name"])
-    print("ES256 OpenSSL OK: 2 issuer and 2 KB-JWT signatures")
+    if not verify(STRING_DISCLOSURE_ISSUER_JWS, STRING_DISCLOSURE_PEM):
+        raise SystemExit("ES256 string-disclosure fixture verification failed")
+    print("ES256 OpenSSL OK: 3 issuer and 2 KB-JWT signatures")

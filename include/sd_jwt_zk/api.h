@@ -49,4 +49,13 @@ class SecretBytes { public: explicit SecretBytes(Bytes bytes = {}); ~SecretBytes
 struct NativeWitness { CompactJws issuer; std::vector<std::string> disclosures; std::optional<CompactJws> kb_jwt; };
 Result<NativeWitness> build_native_witness(std::string_view presentation, const Limits& limits = {});
 bool native_parsing_is_not_proof_verification();
+
+struct RestrictedIssuerPayload {
+  std::string digest;
+  std::string issuer;
+  std::string vct;
+  bool explicit_sha256{};
+};
+Result<RestrictedIssuerPayload> parse_restricted_issuer_payload(
+    std::string_view json, const Limits& limits = {});
 } // namespace sd_jwt_zk

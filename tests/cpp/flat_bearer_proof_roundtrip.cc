@@ -1,0 +1,200 @@
+#include "sd_jwt_zk/flat_bearer_proof.h"
+#include "util/log.h"
+
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <set>
+#include <stdexcept>
+#include <string>
+
+namespace {
+using Clock = std::chrono::steady_clock;
+constexpr char kHeader[] =
+    "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ";
+constexpr char kPayload[] =
+    "eyJfc2QiOlsiRUtEMklOR1JlWkZtQXQ3LXZBbmNlY2VkUVRvb3gzNTlGR1hZR2dZUUJMOCJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSJ9";
+constexpr char kSignature[] =
+    "FQp4GsBBvr3_xbX1UtKSc7mtcw1ygaZ7Z-suRyHET3oggdcr1KqoyH-LA8Yy8pHr3xGkKrrQCu-7fCAbYrTljg";
+constexpr char kDisclosure[] =
+    "WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsInRydWUiXQ";
+constexpr char kX[] =
+    "Jl-RmGfWH_k-UmeHbUnLL58NFLxBz6qOzZqP7z_qxY4";
+constexpr char kY[] =
+    "VBuaEu3T_57clPlJDLwm8xnw1PHFyR4kbXUHyGsK9TU";
+
+void require(bool condition, const char* message) {
+  if (!condition) throw std::runtime_error(message);
+}
+std::uint64_t milliseconds(Clock::time_point start, Clock::time_point end) {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+          .count());
+}
+class ReplayStore final : public sd_jwt_zk::FlatBearerReplayStoreV1 {
+ public:
+  bool consume(std::string_view audience, std::string_view nonce,
+               std::uint64_t) override {
+    return seen_.insert(std::string(audience) + "\0" + std::string(nonce))
+        .second;
+  }
+ private:
+  std::set<std::string> seen_;
+};
+bool accepted(const sd_jwt_zk::Result<bool>& result) {
+  return result && result.value.value();
+}
+}  // namespace
+
+int main() {
+  std::ofstream result("/tmp/sd-jwt-zk-flat-bearer-proof-result.txt");
+  try {
+    proofs::set_log_level(proofs::ERROR);
+    const std::string issuer =
+        std::string(kHeader) + "." + kPayload + "." + kSignature;
+    const std::string presentation = issuer + "~" + kDisclosure + "~";
+    const auto issuer_key = sd_jwt_zk::decode_p256_jwk(kX, kY);
+    require(static_cast<bool>(issuer_key), "fixture issuer key rejected");
+    const auto witness = sd_jwt_zk::flat_bearer_witness_from_presentation(
+        presentation, *issuer_key.value);
+    require(static_cast<bool>(witness), "flat bearer witness rejected");
+    sd_jwt_zk::Request request{
+        sd_jwt_zk::flat_bearer_circuit_identity_v1(),
+        "https://verifier.example", "nonce-flat-bearer-round-trip-v1",
+        100, 200, sd_jwt_zk::flat_bearer_policy_v1(),
+        sd_jwt_zk::flat_bearer_true_policy_result_v1(),
+        sd_jwt_zk::flat_bearer_exact_key_trust_v1(*issuer_key.value), {}};
+
+    const auto prove_start = Clock::now();
+    const auto envelope =
+        sd_jwt_zk::prove_flat_bearer_v1(request, *witness.value);
+    const auto prove_end = Clock::now();
+    require(static_cast<bool>(envelope), "production prover failed");
+    const auto rerandomize_start = Clock::now();
+    const auto rerandomized =
+        sd_jwt_zk::prove_flat_bearer_v1(request, *witness.value);
+    const auto rerandomize_end = Clock::now();
+    require(static_cast<bool>(rerandomized), "rerandomized prover failed");
+    require(envelope.value->proof != rerandomized.value->proof,
+            "repeated proof reused deterministic bytes");
+
+    ReplayStore replay_store;
+    const auto verify_start = Clock::now();
+    require(accepted(sd_jwt_zk::verify_flat_bearer_v1(
+                *envelope.value, request, 150, replay_store)),
+            "production verifier rejected proof");
+    const auto verify_end = Clock::now();
+    require(!accepted(sd_jwt_zk::verify_flat_bearer_v1(
+                *envelope.value, request, 150, replay_store)),
+            "reused nonce accepted");
+    ReplayStore second_store;
+    require(accepted(sd_jwt_zk::verify_flat_bearer_v1(
+                *rerandomized.value, request, 150, second_store)),
+            "rerandomized proof did not verify");
+
+    auto changed_disclosure = *witness.value;
+    constexpr char kChangedDisclosureJson[] =
+        "[\"salt-0001\",\"age_over\",\"frue\"]";
+    const sd_jwt_zk::Bytes changed_json(
+        kChangedDisclosureJson,
+        kChangedDisclosureJson + sizeof(kChangedDisclosureJson) - 1);
+    changed_disclosure.disclosures[0] =
+        sd_jwt_zk::base64url_encode(changed_json);
+    changed_disclosure.disclosure_digests[0] =
+        sd_jwt_zk::sha256_ascii(changed_disclosure.disclosures[0]);
+    auto false_request = request;
+    false_request.policy_result = {0};
+    require(!sd_jwt_zk::prove_flat_bearer_v1(false_request,
+                                             changed_disclosure),
+            "issuer-unbound disclosure produced a proof");
+    require(!sd_jwt_zk::prove_flat_bearer_v1(false_request,
+                                             *witness.value),
+            "false policy result produced a proof for true value");
+
+    auto expect_reject = [&](const sd_jwt_zk::Envelope& candidate,
+                             const sd_jwt_zk::Request& expected,
+                             std::uint64_t now) {
+      ReplayStore store;
+      return !accepted(sd_jwt_zk::verify_flat_bearer_v1(
+          candidate, expected, now, store));
+    };
+    auto changed_audience = request;
+    changed_audience.audience = "https://other-verifier.example";
+    require(expect_reject(*envelope.value, changed_audience, 150),
+            "altered audience accepted");
+    auto changed_nonce = request;
+    changed_nonce.nonce = "different-nonce";
+    require(expect_reject(*envelope.value, changed_nonce, 150),
+            "altered nonce accepted");
+    auto changed_policy = request;
+    changed_policy.policy.push_back('x');
+    require(expect_reject(*envelope.value, changed_policy, 150),
+            "altered policy accepted");
+    auto changed_time = request;
+    changed_time.time_max = 201;
+    require(expect_reject(*envelope.value, changed_time, 150),
+            "altered time bound accepted");
+    require(expect_reject(*envelope.value, request, 99),
+            "future request accepted");
+    require(expect_reject(*envelope.value, request, 201),
+            "expired request accepted");
+
+    auto unsupported = request;
+    unsupported.identity.query_count += 1;
+    require(expect_reject(*envelope.value, unsupported, 150),
+            "unsupported circuit identity accepted");
+    auto wrong_digest = request;
+    wrong_digest.identity.circuit_digest[0] ^= 1;
+    require(expect_reject(*envelope.value, wrong_digest, 150),
+            "wrong circuit digest accepted");
+    auto statement_mismatch = *envelope.value;
+    statement_mismatch.request.audience = changed_audience.audience;
+    require(expect_reject(statement_mismatch, changed_audience, 150),
+            "request/statement mismatch accepted");
+    auto trust_mismatch = *envelope.value;
+    trust_mismatch.request.trust_public[0] ^= 1;
+    auto changed_trust_request = request;
+    changed_trust_request.trust_public[0] ^= 1;
+    require(expect_reject(trust_mismatch, changed_trust_request, 150),
+            "issuer trust mismatch accepted");
+
+    auto truncated = *envelope.value;
+    truncated.proof.pop_back();
+    require(expect_reject(truncated, request, 150),
+            "truncated proof accepted");
+    auto trailing = *envelope.value;
+    trailing.proof.push_back(0);
+    require(expect_reject(trailing, request, 150),
+            "trailing proof bytes accepted");
+
+    result << "production-real-randomized-proof-accepted\n"
+           << "repeated-proof-bytes-differ\n"
+           << "authenticated-disclosure-mutation-rejected\n"
+           << "false-policy-result-witness-rejected\n"
+           << "audience-mismatch-rejected\n"
+           << "nonce-mismatch-rejected\n"
+           << "nonce-reuse-rejected\n"
+           << "policy-mismatch-rejected\n"
+           << "time-mismatch-rejected\n"
+           << "expired-and-future-rejected\n"
+           << "circuit-identity-mismatch-rejected\n"
+           << "request-statement-mismatch-rejected\n"
+           << "issuer-trust-mismatch-rejected\n"
+           << "malformed-and-trailing-proof-rejected\n"
+           << "prove-ms=" << milliseconds(prove_start, prove_end) << '\n'
+           << "rerandomize-ms="
+           << milliseconds(rerandomize_start, rerandomize_end) << '\n'
+           << "verify-ms=" << milliseconds(verify_start, verify_end) << '\n'
+           << "proof-bytes=" << envelope.value->proof.size() << '\n'
+           << "public-inputs=" << sd_jwt_zk::kFlatBearerPublicInputsV1
+           << '\n'
+           << "total-inputs=" << sd_jwt_zk::kFlatBearerDenseInputsV1
+           << '\n';
+    std::cout << "production flat bearer proof API round trip passed\n";
+    return 0;
+  } catch (const std::exception& error) {
+    result << "failed=" << error.what() << '\n';
+    std::cerr << "not ok - " << error.what() << '\n';
+    return 1;
+  }
+}

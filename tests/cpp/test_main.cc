@@ -22,5 +22,15 @@ int main(){
   Bytes raw(64,1);auto sig=decode_es256_signature(base64url_encode(raw));check(sig&&es256_signature_is_low_s(*sig.value),"low-S decision");std::fill(raw.begin()+32,raw.end(),0xff);check(!decode_es256_signature(base64url_encode(raw)),"P-256 scalar range rejects");
   auto j=split_compact_jws("eyJhIjoxfQ.eyJiIjoyfQ.AA");check(static_cast<bool>(j),"compact JWS split");check(!split_compact_jws("a.b.c.d"),"extra delimiter rejected");
   check(static_cast<bool>(build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~")),"native witness accepts terminal tilde");check(!build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~~"),"native witness rejects empty disclosure");Limits tight{};tight.max_input=8;check(!build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~",tight),"bounded native allocation");
+  auto flat=parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\",\"_sd_alg\":\"sha-256\"}");
+  check(flat&&flat.value->issuer=="https://issuer.example"&&flat.value->explicit_sha256,"restricted payload explicit SHA grammar");
+  auto omitted=parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"did:example:issuer\",\"vct\":\"different-vct\"}");
+  check(omitted&&omitted.value->issuer=="did:example:issuer"&&!omitted.value->explicit_sha256,"restricted payload variable slots and SHA default branch");
+  check(!parse_restricted_issuer_payload("{\"iss\":\"https://issuer.example\",\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"vct\":\"example\"}"),"restricted payload rejects reordered substring form");
+  check(!parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\"}x"),"restricted payload rejects hidden trailing bytes");
+  check(!parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\",\"_sd\":[]}"),"restricted payload rejects duplicate reserved member");
+  check(!parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"], \"iss\":\"https://issuer.example\",\"vct\":\"example\"}"),"restricted payload rejects whitespace mutation");
+  check(!parse_restricted_issuer_payload("{\"_sd\":[\"!LEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\"}"),"restricted payload rejects malformed digest base64url");
+  check(!parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https:\\\\issuer.example\",\"vct\":\"example\"}"),"restricted payload rejects escaped strings");
   check(native_parsing_is_not_proof_verification(),"native parsing disclaimer");return failed?1:0;
 }
