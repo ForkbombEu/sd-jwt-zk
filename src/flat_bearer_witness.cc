@@ -72,7 +72,8 @@ bool verify_es256(const P256Key& key, std::string_view input,
   ECDSA_SIG* sig = ok && context ? ECDSA_SIG_new() : nullptr;
   BIGNUM* r = sig ? BN_bin2bn(signature.r.data(), signature.r.size(), nullptr) : nullptr;
   BIGNUM* s = sig ? BN_bin2bn(signature.s.data(), signature.s.size(), nullptr) : nullptr;
-  ok = r && s && ECDSA_SIG_set0(sig, r, s);
+  const bool signature_owns = r && s && ECDSA_SIG_set0(sig, r, s) == 1;
+  ok = signature_owns;
   if (ok) {
     const int der_size = i2d_ECDSA_SIG(sig, nullptr);
     Bytes der(static_cast<std::size_t>(der_size));
@@ -82,7 +83,7 @@ bool verify_es256(const P256Key& key, std::string_view input,
          EVP_DigestVerify(context, der.data(), der.size(),
                           reinterpret_cast<const unsigned char*>(input.data()), input.size()) == 1;
   }
-  if (!ok) { BN_free(r); BN_free(s); }
+  if (!signature_owns) { BN_free(r); BN_free(s); }
   ECDSA_SIG_free(sig); EVP_MD_CTX_free(context); EVP_PKEY_free(pkey);
   EVP_PKEY_CTX_free(key_context);
   return ok;

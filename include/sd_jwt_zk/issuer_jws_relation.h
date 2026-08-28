@@ -17,7 +17,8 @@ namespace sd_jwt_zk {
 // lengths, signature advice, and key coordinates are circuit inputs; native
 // code may construct advice but is never an acceptance substitute.
 template <class LogicCircuit, std::size_t SigningBlocks, std::size_t HeaderChars,
-          std::size_t PayloadChars>
+          std::size_t PayloadChars, std::size_t PaddedPayloadChars = 256,
+          std::size_t IndexBits = 8>
 class IssuerJwsRelation {
   using Field = typename LogicCircuit::Field;
   using v8 = typename LogicCircuit::v8;
@@ -29,7 +30,7 @@ class IssuerJwsRelation {
   using Ecdsa = proofs::VerifyCircuit<LogicCircuit, Field, proofs::P256>;
 
  public:
-  using Index = typename LogicCircuit::template bitvec<8>;
+  using Index = typename LogicCircuit::template bitvec<IndexBits>;
   struct Input {
     const std::array<v8, 64 * SigningBlocks>& sha_input;
     const std::array<typename Sha::BlockWitness, SigningBlocks>& sha_witness;
@@ -40,7 +41,7 @@ class IssuerJwsRelation {
     std::array<v8, (PayloadChars * 6) / 8>& payload_decoded;
     const Index& header_b64_length;
     const Index& payload_b64_length;
-    const std::array<v8, 256>& payload_padded;
+    const std::array<v8, PaddedPayloadChars>& payload_padded;
     const Index& issuer_length;
     const Index& vct_length;
     const Index& payload_length;
@@ -129,7 +130,7 @@ class IssuerJwsRelation {
     RestrictedBase64UrlRelation<LogicCircuit> base64(logic_);
     Index start{};
     logic_.bits(8, start.data(), 0);
-    RestrictedJsonRelation<LogicCircuit, 256, 8> json(logic_);
+    RestrictedJsonRelation<LogicCircuit, PaddedPayloadChars, IndexBits> json(logic_);
     json.assert_literal_at(in.payload_padded, start, "{\"_sd\":[\"", 9);
     for (std::size_t i = 0; i < 43; ++i) {
       typename LogicCircuit::template bitvec<6> sextet{};
@@ -143,10 +144,22 @@ class IssuerJwsRelation {
     Ecdsa verifier(logic_, proofs::p256, proofs::n256_order);
     verifier.verify_signature3(in.public_x, in.public_y, in.digest, in.ecdsa_witness);
   }
+  void assert_ecdsa_bound(const Input& in, const EltW& signature_r,
+                          const EltW& signature_s) const {
+    Ecdsa verifier(logic_, proofs::p256, proofs::n256_order);
+    // VerifyWitness3 represents the third scalar as -s modulo the P-256
+    // order.  Compact JWS carries the conventional positive s scalar.
+    const auto negative_s = logic_.sub(
+        logic_.konst(proofs::p256_base.to_montgomery(proofs::n256_order)),
+        signature_s);
+    verifier.verify_signature3_bound(in.public_x, in.public_y, in.digest,
+                                     signature_r, negative_s,
+                                     in.ecdsa_witness);
+  }
 
   void assert_decode_padded_payload(const std::array<v8, PayloadChars>& payload_b64,
                                     const Index& payload_b64_length,
-                                    const std::array<v8, 256>& payload_padded) const {
+                                    const std::array<v8, PaddedPayloadChars>& payload_padded) const {
     std::array<v8, (PayloadChars * 6) / 8> payload{};
     for (auto& byte : payload) byte = logic_.template vbit<8>(0);
     decode_payload_bucket(payload_b64, payload_b64_length, payload);
@@ -160,8 +173,8 @@ class IssuerJwsRelation {
   }
 
   void assert_padded_payload(const std::array<v8, (PayloadChars * 6) / 8>& payload,
-                             const std::array<v8, 256>& payload_padded) const {
-    static_assert((PayloadChars * 6) / 8 <= 256);
+                             const std::array<v8, PaddedPayloadChars>& payload_padded) const {
+    static_assert((PayloadChars * 6) / 8 <= PaddedPayloadChars);
     for (std::size_t i = 0; i < payload.size(); ++i) logic_.vassert_eq(payload_padded[i], payload[i]);
     for (std::size_t i = payload.size(); i < payload_padded.size(); ++i) logic_.vassert_eq(payload_padded[i], 0);
   }

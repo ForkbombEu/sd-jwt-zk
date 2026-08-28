@@ -1,6 +1,7 @@
 #include "sd_jwt_zk/api.h"
 
 #include <algorithm>
+#include <charconv>
 
 namespace sd_jwt_zk {
 namespace {
@@ -46,10 +47,45 @@ Result<RestrictedIssuerPayload> parse_restricted_issuer_payload(
       !consume(json, at, ",\"vct\":" ) || !quoted(json, at, result.vct, limits.max_field)) {
     return Result<RestrictedIssuerPayload>::fail(ErrorCode::malformed, "restricted payload grammar");
   }
+  if (consume(json, at, ",\"cnf\":{\"jwk\":{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":")) {
+    std::string x, y;
+    if (!quoted(json, at, x, 43) || x.size() != 43 ||
+        !consume(json, at, ",\"y\":" ) || !quoted(json, at, y, 43) ||
+        y.size() != 43 || !consume(json, at, "}}")) {
+      return Result<RestrictedIssuerPayload>::fail(ErrorCode::malformed, "restricted cnf jwk grammar");
+    }
+    auto key = decode_p256_jwk(x, y);
+    if (!key || !p256_key_is_valid(*key.value))
+      return Result<RestrictedIssuerPayload>::fail(ErrorCode::malformed, "invalid cnf P-256 key");
+    result.holder_key = *key.value;
+  }
   if (consume(json, at, ",\"_sd_alg\":\"sha-256\"")) result.explicit_sha256 = true;
   if (!consume(json, at, "}") || at != json.size()) {
     return Result<RestrictedIssuerPayload>::fail(ErrorCode::malformed, "restricted payload trailing or algorithm");
   }
   return Result<RestrictedIssuerPayload>::ok(std::move(result));
+}
+
+Result<RestrictedKbJwtPayload> parse_restricted_kb_jwt_payload(
+    std::string_view json, const Limits& limits) {
+  if (json.empty() || json.size() > limits.max_field)
+    return Result<RestrictedKbJwtPayload>::fail(ErrorCode::limit, "restricted KB-JWT payload limit");
+  RestrictedKbJwtPayload result;
+  std::size_t at = 0;
+  if (!consume(json, at, "{\"aud\":" ) ||
+      !quoted(json, at, result.audience, limits.max_field) ||
+      !consume(json, at, ",\"nonce\":" ) ||
+      !quoted(json, at, result.nonce, limits.max_field) ||
+      !consume(json, at, ",\"iat\":"))
+    return Result<RestrictedKbJwtPayload>::fail(ErrorCode::malformed, "restricted KB-JWT payload grammar");
+  const auto number_start = at;
+  while (at < json.size() && json[at] >= '0' && json[at] <= '9') ++at;
+  if (at == number_start || (at - number_start > 1 && json[number_start] == '0') ||
+      std::from_chars(json.data() + number_start, json.data() + at, result.issued_at).ec != std::errc{} ||
+      !consume(json, at, ",\"sd_hash\":" ) ||
+      !quoted(json, at, result.sd_hash, 43) || result.sd_hash.size() != 43 ||
+      !b64url(result.sd_hash) || !consume(json, at, "}") || at != json.size())
+    return Result<RestrictedKbJwtPayload>::fail(ErrorCode::malformed, "restricted KB-JWT payload grammar");
+  return Result<RestrictedKbJwtPayload>::ok(std::move(result));
 }
 }  // namespace sd_jwt_zk
