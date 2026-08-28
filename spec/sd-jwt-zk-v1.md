@@ -58,6 +58,83 @@ Before expensive verification, the verifier obtains the accepted exact key or au
 
 Status is deliberately staged: V1 returns no assertion that a credential is valid, unrevoked, or status-checked. A later status identity must bind an authenticated snapshot and still keep its reference/index private.
 
+## Issuer authorization registry V1
+
+Registry roots are locally authenticated trust inputs, never values chosen by a
+presentation.  A registry has an unsigned transport record containing `epoch`,
+`valid_from`, `valid_until`, fixed `depth`, and a 32-byte root.  Deployments
+authenticate that transport record (for example with their trust-list signing
+key) before giving it to the verifier; root download, signature verification,
+caching, and rollback protection are external policy.
+
+The canonical authorization record used for sorting is
+`x(32) || y(32) || u32(len(vct)) || vct || u64(not_before) || u64(not_after)`.
+All integer fields are unsigned big-endian; `vct` is nonempty printable ASCII
+without quote or backslash; and `not_before <= not_after`.  The P-256 point
+must be valid and non-infinite.  Records sort lexicographically by these exact
+bytes and duplicate canonical records are rejected.
+
+The host builder uses SHA-256 over the following concatenations (the tags are
+literal ASCII with no implicit delimiter):
+
+```
+leaf(record) = SHA-256("SDJWT-ZK/issuer-registry/v1/leaf" || x || y || SHA-256(vct) || u64(not_before) || u64(not_after))
+empty(h)    = SHA-256("SDJWT-ZK/issuer-registry/v1/empty" || u8(h))
+node(l, r)  = SHA-256("SDJWT-ZK/issuer-registry/v1/node" || l || r)
+```
+
+At level zero, sorted records occupy the lowest indices and every remaining
+slot is `empty(0)`.  Parent nodes are `node(left,right)`; a path contains one
+sibling and one direction bit per level, where the direction bit equals bit
+`level` of the little-endian conceptual leaf index.  Tree depth is one through
+20, so capacity is exactly `2^depth`; the fixed depth is part of the circuit
+identity and public request.  An empty registry has a deterministic root but
+has no valid membership path.
+
+The leaf's issuer coordinates, `vct`, interval, index, and path are private in
+registry proof families.  The circuit exposes only root, epoch, the root
+validity window, depth/capacity, and requested policy.  It proves that the
+complete public root window lies in the hidden authorization interval; the
+verifier separately requires its current time to lie in that root window and
+in the request window.  A public `vct` policy is permitted only when local
+governance authenticates a registry as single-VCT scoped; mixed or unscoped
+roots cannot satisfy that policy merely because the presentation names a VCT.
+
+### Local root lifecycle policy
+
+The safe verification entry points require an
+`IssuerRegistryVerifierPolicyV1` assembled from authenticated local
+configuration.  Each accepted entry fixes the complete canonical context
+tuple `(root, epoch, valid_from, valid_until, depth)`, its governed
+authorization count, revocation state, and optional public VCT scope.  The
+`root_id` used in inspection is the lowercase SHA-256 hex digest of the
+canonical encoded context; matching only the 32-byte Merkle root is
+insufficient because it would let a proof choose epoch, window, or capacity.
+
+Policy evaluation occurs before proof parsing and fails closed for an unknown
+or revoked context, epoch rollback, future or expired window, wrong fixed
+depth/capacity, zero/oversized/undersized authorization set, or VCT-scope
+mismatch.  Proof metadata never adds an accepted root.  Exact-key evidence is
+rejected by registry policy and registry evidence is rejected by exact-key
+entry points; applications must select a mode explicitly.
+
+Rotation publishes the replacement at a strictly newer epoch.  Operators may
+configure both old and new complete contexts during a bounded overlap, then
+raise `minimum_epoch` and revoke/remove the old entry.  A rollback to the old
+root fails even if its original validity window has not elapsed.  Emergency
+revocation takes precedence over overlap and validity.  Verification fails
+closed when authenticated root configuration is unavailable.
+
+Safe inspection reports only `root_id`, epoch, public root window, fixed depth,
+capacity, and the locally configured authorization-count upper bound.  It
+never accepts a witness/path object and therefore cannot print issuer
+coordinates, leaf index, siblings, direction bits, private authorization
+interval, or hidden VCT.  It prints a public VCT only when the verifier policy
+both requires that authenticated scope and explicitly enables inspection
+disclosure.  Small registries, scoped roots, and rare authorized types can
+still make the issuer linkable; the configured authorization count is an upper
+bound on anonymity, not a promise that all entries are equally plausible.
+
 ## Privacy limits and leakage
 
 ZK hides witness bytes; it does not hide public policy. Claim by claim: a revealed selected value is disclosed; equality/range/set/predicate reveals its Boolean result; requested paths, their number, and policy shape reveal intent; absence/unsupported-shape rejection can reveal format facts. Audience/domain, nonce, timing, verifier identity, proof size, circuit family, capacity bucket, exact issuer key (in exact-key mode), registry root/epoch/depth (in registry mode), and later status cohort are linkable public metadata. Capacity buckets leak an upper bound on credential/disclosure size. A small registry or rare credential type can re-identify an issuer even though the key/path are private. Network, transport, IP address, verifier logging, root/status retrieval and a verifier reusing challenges can independently destroy unlinkability. Fresh proof randomness is required but cannot repair any of those disclosures.

@@ -53,6 +53,16 @@ class IssuerJwsRelation {
     std::uint8_t sha_block_count;
   };
 
+  // One SHA-256 block is sufficient for the V1 registry type bucket (1..32
+  // printable bytes plus SHA padding).  The padded message and SHA advice are
+  // private witness material; every meaningful byte is routed from the
+  // issuer-signed payload below.
+  struct RegistryVctHashInput {
+    const std::array<v8, 64>& padded_message;
+    const typename Sha::BlockWitness& sha_witness;
+    const v256& digest_bits;
+  };
+
   explicit IssuerJwsRelation(const LogicCircuit& logic) : logic_(logic) {}
 
   void assert_compact_separator(const std::array<v8, 64 * SigningBlocks>& signing,
@@ -164,6 +174,48 @@ class IssuerJwsRelation {
     for (auto& byte : payload) byte = logic_.template vbit<8>(0);
     decode_payload_bucket(payload_b64, payload_b64_length, payload);
     assert_padded_payload(payload, payload_padded);
+  }
+
+  // Exports a byte of the already authenticated, restricted `vct` slot.  The
+  // caller supplies the slot offset; its only legal values are selected from
+  // the same private issuer-length branches as assert_json().  This is the
+  // composition boundary used by registry membership: host parsing cannot
+  // substitute a type string after issuer signature verification.
+  v8 authenticated_vct_byte(const Input& in, std::size_t byte_index) const {
+    RestrictedJsonRelation<LogicCircuit, PaddedPayloadChars, IndexBits> json(logic_);
+    typename LogicCircuit::template bitvec<IndexBits> start{};
+    for (std::size_t bit = 0; bit < start.size(); ++bit) start[bit] = logic_.bit(0);
+    // Canonical restricted JSON has vct bytes at 71 + issuer_length.  The
+    // low-level add is constrained field arithmetic, not a host offset.
+    start = logic_.vadd(in.issuer_length, 71 + byte_index);
+    return json.routed_first(in.payload_padded, start);
+  }
+
+  void assert_registry_vct_hash(const Input& in,
+                                const RegistryVctHashInput& hash_input) const {
+    logic_.assert1(logic_.vleq(in.vct_length, 32));
+    typename LogicCircuit::BitW selected = logic_.bit(0);
+    for (std::size_t length = 1; length <= 32; ++length) {
+      const auto branch = logic_.veq(in.vct_length, length);
+      selected = logic_.lor_exclusive(selected, branch);
+      for (std::size_t i = 0; i < length; ++i)
+        logic_.assert_implies(branch, logic_.veq(
+            hash_input.padded_message[i], authenticated_vct_byte(in, i)));
+      logic_.assert_implies(branch,
+          logic_.veq(hash_input.padded_message[length], 0x80));
+      for (std::size_t i = length + 1; i < 56; ++i)
+        logic_.assert_implies(branch, logic_.veq(hash_input.padded_message[i], 0));
+      for (std::size_t i = 0; i < 8; ++i) {
+        const auto bits = static_cast<std::uint8_t>((length * 8) >> (56 - 8 * i));
+        logic_.assert_implies(branch,
+            logic_.veq(hash_input.padded_message[56 + i], bits));
+      }
+    }
+    logic_.assert1(selected);
+    std::array<typename Sha::BlockWitness, 1> witness{hash_input.sha_witness};
+    Sha(logic_).assert_message_hash(1, logic_.template vbit<8>(1),
+                                    hash_input.padded_message.data(),
+                                    hash_input.digest_bits, witness.data());
   }
 
   void decode_payload_bucket(const std::array<v8, PayloadChars>& payload_b64,

@@ -18,6 +18,9 @@ endif()
 
 add_library(sd-jwt-zk src/codec.cc src/native.cc src/restricted_json.cc
   src/sha256.cc src/flat_bearer_witness.cc src/flat_bearer_proof.cc
+  src/issuer_registry.cc
+  src/issuer_registry_policy.cc
+  src/registry_bearer_proof.cc
   src/holder_kb_witness.cc src/holder_credential_witness.cc
   src/holder_bound_proof.cc)
 add_library(SDJWTZK::sd-jwt-zk ALIAS sd-jwt-zk)
@@ -68,6 +71,11 @@ if(BUILD_TESTING)
     PRIVATE SDJWTZK::sd-jwt-zk)
   add_test(NAME sd-jwt-zk-holder-bound-adapter-contract
     COMMAND sd-jwt-zk-holder-bound-adapter-contract)
+  add_executable(sd-jwt-zk-registry-policy
+    tests/cpp/registry_policy_test.cc)
+  target_link_libraries(sd-jwt-zk-registry-policy
+    PRIVATE SDJWTZK::sd-jwt-zk)
+  add_test(NAME sd-jwt-zk-registry-policy COMMAND sd-jwt-zk-registry-policy)
   if(SD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS)
     # These targets compile production-scale circuits and have measured peak
     # RSS above 1.5 GiB.  Keep them in the same explicit opt-in lane as real
@@ -84,6 +92,17 @@ if(BUILD_TESTING)
       PRIVATE SDJWTZK::sd-jwt-zk)
     add_test(NAME sd-jwt-zk-flat-bearer-factory
       COMMAND sd-jwt-zk-flat-bearer-factory)
+    add_executable(sd-jwt-zk-registry-bearer-factory
+      tests/cpp/registry_bearer_factory_compile.cc)
+    target_link_libraries(sd-jwt-zk-registry-bearer-factory PRIVATE SDJWTZK::sd-jwt-zk)
+    add_test(NAME sd-jwt-zk-registry-bearer-factory
+      COMMAND sd-jwt-zk-registry-bearer-factory)
+    add_executable(sd-jwt-zk-registry-bearer-real-proof
+      tests/cpp/registry_bearer_real_proof.cc)
+    target_link_libraries(sd-jwt-zk-registry-bearer-real-proof
+      PRIVATE SDJWTZK::sd-jwt-zk)
+    add_test(NAME sd-jwt-zk-registry-bearer-real-proof
+      COMMAND sd-jwt-zk-registry-bearer-real-proof)
     add_executable(sd-jwt-zk-flat-bearer-proof-roundtrip
       tests/cpp/flat_bearer_proof_roundtrip.cc)
     target_link_libraries(sd-jwt-zk-flat-bearer-proof-roundtrip
@@ -175,6 +194,12 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME sd-jwt-zk-holder-bound-api-real-proof
       COMMAND sd-jwt-zk-holder-bound-api-real-proof)
+    add_executable(sd-jwt-zk-holder-registry-real-proof
+      tests/cpp/holder_registry_real_proof.cc)
+    target_link_libraries(sd-jwt-zk-holder-registry-real-proof
+      PRIVATE SDJWTZK::sd-jwt-zk)
+    add_test(NAME sd-jwt-zk-holder-registry-real-proof
+      COMMAND sd-jwt-zk-holder-registry-real-proof)
   endif()
   add_test(NAME sd-jwt-zk-cli-help COMMAND sd-jwt-zk-cli --help)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)

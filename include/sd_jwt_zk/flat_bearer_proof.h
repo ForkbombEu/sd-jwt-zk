@@ -7,6 +7,7 @@
 #include "arrays/dense.h"
 #include "sd_jwt_zk/api.h"
 #include "sd_jwt_zk/issuer_jws_relation.h"
+#include "sd_jwt_zk/p256_coordinate_relation.h"
 #include "circuits/compiler/compiler.h"
 #include "circuits/logic/compiler_backend.h"
 #include "circuits/logic/logic.h"
@@ -46,7 +47,7 @@ using FlatBearerField = proofs::Fp256Base;
 using FlatBearerBackend = proofs::CompilerBackend<FlatBearerField>;
 using FlatBearerLogic = proofs::Logic<FlatBearerField, FlatBearerBackend>;
 inline constexpr std::size_t kFlatBearerPublicInputsV1 = 36;
-inline constexpr std::size_t kFlatBearerDenseInputsV1 = 19704;
+inline constexpr std::size_t kFlatBearerDenseInputsV1 = 22456;
 
 // Fills the exact wire order declared by BuildFlatBearerCircuitV1.  The full
 // witness begins with the compiler's constant-one input, the public statement,
@@ -98,6 +99,13 @@ inline std::unique_ptr<proofs::Circuit<FlatBearerField>> BuildFlatBearerCircuitV
   const auto public_x = logic.eltw_input();
   const auto public_y = logic.eltw_input();
   q->private_input();
+  FlatBearerLogic::bitvec<256> registry_x_bits{}, registry_y_bits{};
+  for (auto* coordinate : {&registry_x_bits, &registry_y_bits})
+    for (auto& bit : *coordinate) bit = logic.input();
+  CanonicalP256CoordinateRelation<FlatBearerLogic>(logic).assert_bound(
+      public_x, registry_x_bits);
+  CanonicalP256CoordinateRelation<FlatBearerLogic>(logic).assert_bound(
+      public_y, registry_y_bits);
   for (const auto& wire : public_statement) logic.assert_eq(wire, logic.eltw_input());
   using Relation = IssuerJwsRelation<FlatBearerLogic, kSigningBlocks, kHeaderChars, kPayloadChars>;
   using Sha = proofs::FlatSHA256Circuit<FlatBearerLogic, proofs::BitPlucker<FlatBearerLogic, 4>>;
@@ -141,9 +149,18 @@ inline std::unique_ptr<proofs::Circuit<FlatBearerField>> BuildFlatBearerCircuitV
       disclosure_len{};
   for (auto* index : {&salt_len, &name_len, &value_len, &disclosure_len})
     for (auto& bit : *index) bit = logic.input();
+  std::array<FlatBearerLogic::v8, 64> registry_vct_sha_input{};
+  for (auto& byte : registry_vct_sha_input) byte = logic.template vinput<8>();
+  typename Sha::BlockWitness registry_vct_sha_witness{};
+  registry_vct_sha_witness.input(logic);
+  FlatBearerLogic::v256 registry_vct_digest{};
+  for (auto& bit : registry_vct_digest) bit = logic.input();
 
   Relation relation(logic);
   relation.assert_valid(issuer);
+  relation.assert_registry_vct_hash(
+      issuer, typename Relation::RegistryVctHashInput{
+          registry_vct_sha_input, registry_vct_sha_witness, registry_vct_digest});
   relation.template assert_disclosure_binding<1, kDisclosureChars>(
       issuer, disclosure_input);
   Disclosure disclosure(logic);

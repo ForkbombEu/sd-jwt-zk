@@ -1,4 +1,5 @@
 #include "sd_jwt_zk/api.h"
+#include "sd_jwt_zk/issuer_registry.h"
 #include <algorithm>
 #include <atomic>
 #include <fstream>
@@ -87,6 +88,31 @@ int main(){
   auto padded_coordinate=holder_json;padded_coordinate.replace(padded_coordinate.find(gxb64),1,"=");check(!parse_restricted_issuer_payload(padded_coordinate),"restricted payload rejects padded cnf coordinate");
   auto duplicate_cnf=holder_json;duplicate_cnf.insert(duplicate_cnf.size()-1,",\"cnf\":{}");check(!parse_restricted_issuer_payload(duplicate_cnf),"restricted payload rejects duplicate cnf");
   auto alternate_cnf="{\"cnf\":{\"jwk\":{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\""+gxb64+"\",\"y\":\""+gyb64+"\"}},\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\"}";check(!parse_restricted_issuer_payload(alternate_cnf),"restricted payload rejects alternate cnf placement");
+  IssuerAuthorizationRecordV1 registry_a{{gx,gy},"urn:example:alpha",10,20};
+  IssuerAuthorizationRecordV1 registry_b{{gx,gy},"urn:example:beta",11,21};
+  auto registry=build_issuer_registry_v1({registry_b,registry_a},3,7,1,30);
+  check(registry&&registry.value->paths.size()==2,"registry builds bounded deterministic paths");
+  auto reordered=build_issuer_registry_v1({registry_a,registry_b},3,7,1,30);
+  check(registry&&reordered&&registry.value->root==reordered.value->root,"registry input order does not affect root");
+  if(registry){
+    const auto registry_golden=hex("7ac19e423541371a2d1894e49e67b4689aae662fce1a56a30cb25686e060258a");check(registry_golden.size()==registry.value->root.size()&&std::equal(registry.value->root.begin(),registry.value->root.end(),registry_golden.begin()),"registry root matches independent golden reference");
+    check(issuer_registry_path_matches_v1(*registry.value,registry.value->paths[0]),"registry path matches root");
+    auto sibling=registry.value->paths[0];sibling.siblings[0][0]^=1;check(!issuer_registry_path_matches_v1(*registry.value,sibling),"registry sibling mutation rejects");
+    auto direction=registry.value->paths[0];direction.sibling_is_left[0]=!direction.sibling_is_left[0];check(!issuer_registry_path_matches_v1(*registry.value,direction),"registry direction mutation rejects");
+    auto index=registry.value->paths[0];index.index^=1;check(!issuer_registry_path_matches_v1(*registry.value,index),"registry index mutation rejects");
+    auto root=*registry.value;root.root[0]^=1;check(!issuer_registry_path_matches_v1(root,root.paths[0]),"registry root mutation rejects");
+    auto depth=*registry.value;--depth.depth;check(!issuer_registry_path_matches_v1(depth,depth.paths[0]),"registry depth mutation rejects");
+    auto epoch=*registry.value;++epoch.epoch;check(!issuer_registry_path_matches_v1(epoch,epoch.paths[0]),"registry epoch mutation rejects");
+    const auto context=registry_trust_context_v1(*registry.value);auto context_wire=encode_registry_trust_context_v1(context);check(context_wire&&decode_registry_trust_context_v1(*context_wire.value),"registry public trust context canonical round trip");
+    if(context_wire){auto trailing=*context_wire.value;trailing.push_back(0);check(!decode_registry_trust_context_v1(trailing),"registry context trailing byte rejects");auto malformed=*context_wire.value;malformed.back()=0;check(!decode_registry_trust_context_v1(malformed),"registry context depth mutation rejects");}
+  }
+  check(!build_issuer_registry_v1({registry_a,registry_a},3,7,1,30),"registry duplicate authorization rejects");
+  auto bad_interval=registry_a;bad_interval.not_before=22;bad_interval.not_after=21;check(!build_issuer_registry_v1({bad_interval},3,7,1,30),"registry invalid authorization interval rejects");
+  auto bad_vct=registry_a;bad_vct.vct="bad vct";check(!build_issuer_registry_v1({bad_vct},3,7,1,30),"registry malformed vct rejects");
+  auto bad_key=registry_a;bad_key.issuer_key.x.fill(0);bad_key.issuer_key.y.fill(0);check(!build_issuer_registry_v1({bad_key},3,7,1,30),"registry invalid P-256 key rejects");
+  check(!build_issuer_registry_v1({registry_a},0,7,1,30),"registry zero depth rejects");
+  check(!build_issuer_registry_v1({registry_a},3,7,31,30),"registry invalid root validity rejects");
+  auto empty_registry=build_issuer_registry_v1({},3,7,1,30);const auto empty_golden=hex("c8a4dbd2d4cce58e560e66c3d92c86221422af12f921eb6e2a3ecbf08bf2a193");check(empty_registry&&empty_registry.value->paths.empty()&&empty_golden.size()==empty_registry.value->root.size()&&std::equal(empty_registry.value->root.begin(),empty_registry.value->root.end(),empty_golden.begin()),"registry empty padding root matches independent golden");
   const auto kb_json="{\"aud\":\"https://verifier.example\",\"nonce\":\"fresh-1\",\"iat\":42,\"sd_hash\":\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"}";
   auto kb=parse_restricted_kb_jwt_payload(kb_json);check(kb&&kb.value->audience=="https://verifier.example"&&kb.value->nonce=="fresh-1"&&kb.value->issued_at==42,"restricted KB-JWT payload accepts complete canonical fields");
   check(!parse_restricted_kb_jwt_payload("{\"aud\":\"https://verifier.example\",\"nonce\":\"fresh-1\",\"iat\":042,\"sd_hash\":\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"}"),"restricted KB-JWT rejects noncanonical iat");

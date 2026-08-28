@@ -19,6 +19,8 @@
 #include "sd_jwt_zk/holder_dense_layout.h"
 #include "sd_jwt_zk/holder_issuer_jws_relation.h"
 #include "sd_jwt_zk/presentation_hash_relation.h"
+#include "sd_jwt_zk/p256_coordinate_relation.h"
+#include "sd_jwt_zk/issuer_registry_membership_relation.h"
 
 namespace sd_jwt_zk {
 using HolderCredentialField = proofs::Fp256Base;
@@ -43,10 +45,11 @@ typename Logic::template bitvec<N> bits(const Logic& logic) {
 // Bounded credential component of the holder pair.  It deliberately contains
 // no KB wires: its only cross-component interface is the MAC on cnf x/y and
 // the exact active-presentation SHA-256 digest.
+template <bool Registry>
 inline std::unique_ptr<proofs::Circuit<HolderCredentialField>>
-BuildHolderCredentialCircuitV1(proofs::QuadCircuit<HolderCredentialField>* q,
-                               HolderDenseLayoutV1* layout = nullptr,
-                               bool include_bridge = true) {
+BuildHolderCredentialCircuitImplV1(
+    proofs::QuadCircuit<HolderCredentialField>* q,
+    HolderDenseLayoutV1* layout = nullptr, bool include_bridge = true) {
   // The first real-proof V1 bucket fixes the authenticated compact length at
   // 514 bytes (seven signing blocks) while retaining zero-padded parser
   // capacity.  Larger active compact lengths require a distinct circuit ID.
@@ -62,6 +65,7 @@ BuildHolderCredentialCircuitV1(proofs::QuadCircuit<HolderCredentialField>* q,
   using Presentation = PresentationHashRelation<
       L, PresentationBlocks, ActiveCompact, DisclosureChars>;
   using Bridge = HolderBridgeMacRelation<L>;
+  using Membership = IssuerRegistryMembershipRelation<L, 2>;
   HolderCredentialBackend backend(q);
   L logic(&backend, proofs::p256_base);
 #ifdef SD_JWT_ZK_HOLDER_FACTORY_METRICS
@@ -77,10 +81,27 @@ BuildHolderCredentialCircuitV1(proofs::QuadCircuit<HolderCredentialField>* q,
   for (auto& tag : tags) tag = logic.vinput<128>();
   const auto av = logic.vinput<128>();
   const auto policy = logic.input();
-  const auto issuer_x = logic.eltw_input();
-  const auto issuer_y = logic.eltw_input();
-  if (layout) layout->begin(q->ninput_);
-  q->private_input();
+  L::EltW issuer_x{}, issuer_y{};
+  std::array<L::v8, 32> registry_root{};
+  L::bitvec<64> registry_epoch{}, registry_valid_from{},
+      registry_valid_until{};
+  L::bitvec<8> registry_depth{};
+  if constexpr (Registry) {
+    for (auto& byte : registry_root) byte = logic.template vinput<8>();
+    registry_epoch = logic.template vinput<64>();
+    registry_valid_from = logic.template vinput<64>();
+    registry_valid_until = logic.template vinput<64>();
+    registry_depth = logic.template vinput<8>();
+    if (layout) layout->begin(q->ninput_);
+    q->private_input();
+    issuer_x = logic.eltw_input();
+    issuer_y = logic.eltw_input();
+  } else {
+    issuer_x = logic.eltw_input();
+    issuer_y = logic.eltw_input();
+    if (layout) layout->begin(q->ninput_);
+    q->private_input();
+  }
   const auto issuer_start = q->ninput_;
   auto sha_in = holder_credential_detail::bytes<L, 64 * B>(logic);
   std::array<Sha::BlockWitness, B> sha_w{}; for (auto& w : sha_w) w.input(logic);
@@ -103,6 +124,67 @@ BuildHolderCredentialCircuitV1(proofs::QuadCircuit<HolderCredentialField>* q,
   const auto signature_s = logic.eltw_input();
   const auto holder_x = logic.eltw_input();
   const auto holder_y = logic.eltw_input();
+  L::bitvec<256> registry_issuer_x_bits{}, registry_issuer_y_bits{};
+  for (auto* coordinate : {&registry_issuer_x_bits, &registry_issuer_y_bits})
+    for (auto& bit : *coordinate) bit = logic.input();
+  CanonicalP256CoordinateRelation<L>(logic).assert_bound(issuer_x,
+                                                          registry_issuer_x_bits);
+  CanonicalP256CoordinateRelation<L>(logic).assert_bound(issuer_y,
+                                                          registry_issuer_y_bits);
+  std::array<L::v8, 64> registry_vct_sha_input{};
+  for (auto& byte : registry_vct_sha_input) byte = logic.template vinput<8>();
+  Sha::BlockWitness registry_vct_sha_witness{};
+  registry_vct_sha_witness.input(logic);
+  L::v256 registry_vct_digest{};
+  for (auto& bit : registry_vct_digest) bit = logic.input();
+  if constexpr (Registry) {
+    std::array<L::v8, 32> issuer_x_bytes{}, issuer_y_bytes{};
+    for (std::size_t byte = 0; byte < 32; ++byte)
+      for (std::size_t bit = 0; bit < 8; ++bit) {
+        issuer_x_bytes[31 - byte][bit] =
+            registry_issuer_x_bits[byte * 8 + bit];
+        issuer_y_bytes[31 - byte][bit] =
+            registry_issuer_y_bits[byte * 8 + bit];
+      }
+    const auto not_before_bits = logic.template vinput<64>();
+    const auto not_after_bits = logic.template vinput<64>();
+    const auto private_epoch = logic.template vinput<64>();
+    const auto leaf_index = logic.template vinput<2>();
+    std::array<L::v8, 8> not_before{}, not_after{};
+    for (auto* value : {&not_before, &not_after})
+      for (auto& byte : *value) byte = logic.template vinput<8>();
+    std::array<L::v8, 192> leaf_message{};
+    for (auto& byte : leaf_message) byte = logic.template vinput<8>();
+    std::array<typename Sha::BlockWitness, 3> leaf_witness{};
+    for (auto& block : leaf_witness) block.input(logic);
+    L::v256 leaf_digest{};
+    for (auto& bit : leaf_digest) bit = logic.input();
+    std::array<std::array<L::v8, 32>, 2> siblings{};
+    for (auto& sibling : siblings)
+      for (auto& byte : sibling) byte = logic.template vinput<8>();
+    std::array<L::BitW, 2> directions{leaf_index[0], leaf_index[1]};
+    std::array<std::array<L::v8, 128>, 2> node_messages{};
+    std::array<std::array<typename Sha::BlockWitness, 2>, 2>
+        node_witnesses{};
+    std::array<L::v256, 2> node_digests{};
+    for (std::size_t level = 0; level < 2; ++level) {
+      for (auto& byte : node_messages[level])
+        byte = logic.template vinput<8>();
+      for (auto& block : node_witnesses[level]) block.input(logic);
+      for (auto& bit : node_digests[level]) bit = logic.input();
+    }
+    typename Membership::Hash3 leaf{leaf_message, leaf_witness, leaf_digest};
+    std::array<typename Membership::Hash2, 2> nodes{
+        typename Membership::Hash2{node_messages[0], node_witnesses[0],
+                                   node_digests[0]},
+        typename Membership::Hash2{node_messages[1], node_witnesses[1],
+                                   node_digests[1]}};
+    Membership(logic).assert_valid(typename Membership::Input{
+        issuer_x_bytes, issuer_y_bytes, registry_vct_digest, not_before,
+        not_after, not_before_bits, not_after_bits, private_epoch, leaf_index,
+        leaf, siblings, directions, nodes, registry_root, registry_epoch,
+        registry_valid_from, registry_valid_until, registry_depth});
+  }
   if (layout) layout->add("issuer-cnf-and-signature", issuer_start, q->ninput_);
   const auto presentation_start = q->ninput_;
   auto compact = holder_credential_detail::bytes<L, Compact>(logic);
@@ -130,6 +212,9 @@ BuildHolderCredentialCircuitV1(proofs::QuadCircuit<HolderCredentialField>* q,
   const auto bridge_start = q->ninput_;
   Holder(logic).assert_valid(issuer, holder_x, holder_y, signature,
                              signature_r, signature_s);
+  Issuer(logic).assert_registry_vct_hash(
+      issuer, typename Issuer::RegistryVctHashInput{
+          registry_vct_sha_input, registry_vct_sha_witness, registry_vct_digest});
   Holder(logic).assert_full_compact_binding(issuer, signature, compact,
                                             compact_len);
   logic.assert1(logic.veq(compact_len, ActiveCompact));
@@ -177,5 +262,19 @@ BuildHolderCredentialCircuitV1(proofs::QuadCircuit<HolderCredentialField>* q,
 #endif
   if (layout) layout->finish(circuit->ninputs);
   return circuit;
+}
+
+inline std::unique_ptr<proofs::Circuit<HolderCredentialField>>
+BuildHolderCredentialCircuitV1(proofs::QuadCircuit<HolderCredentialField>* q,
+                               HolderDenseLayoutV1* layout = nullptr,
+                               bool include_bridge = true) {
+  return BuildHolderCredentialCircuitImplV1<false>(q, layout, include_bridge);
+}
+
+inline std::unique_ptr<proofs::Circuit<HolderCredentialField>>
+BuildHolderRegistryCredentialCircuitV1(
+    proofs::QuadCircuit<HolderCredentialField>* q,
+    HolderDenseLayoutV1* layout = nullptr, bool include_bridge = true) {
+  return BuildHolderCredentialCircuitImplV1<true>(q, layout, include_bridge);
 }
 }  // namespace sd_jwt_zk

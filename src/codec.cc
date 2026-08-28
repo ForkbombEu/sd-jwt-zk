@@ -17,7 +17,8 @@ Result<Envelope> decode_envelope(const Bytes&b,const Limits&l){if(!limits(l,b.si
 namespace {
 bool holder_identity(const CircuitIdentity& identity) {
   return identity.binding == Binding::holder_bound &&
-         identity.trust == Trust::exact_key;
+         (identity.trust == Trust::exact_key ||
+          identity.trust == Trust::registry);
 }
 bool identity_equal(const CircuitIdentity& left, const CircuitIdentity& right) {
   return left.binding == right.binding && left.trust == right.trust &&
@@ -34,6 +35,7 @@ Result<void*> holder_shape(const HolderBoundEnvelope& value, const Limits& limit
   if (!holder_identity(value.request.identity) ||
       !holder_identity(value.credential_identity) ||
       !holder_identity(value.kb_identity) ||
+      value.credential_identity.trust != value.kb_identity.trust ||
       !identity_equal(value.request.identity, value.credential_identity) ||
       value.credential_identity.circuit_digest == value.kb_identity.circuit_digest ||
       value.request.audience.empty() || value.request.nonce.empty() ||
@@ -78,6 +80,7 @@ Result<HolderBoundEnvelope> prove_holder_bound_envelope_v1(
   if (!holder_identity(request.request.identity) ||
       !holder_identity(request.credential_identity) ||
       !holder_identity(request.kb_identity) ||
+      request.credential_identity.trust != request.kb_identity.trust ||
       !identity_equal(request.request.identity, request.credential_identity) ||
       request.credential_identity.circuit_digest ==
           request.kb_identity.circuit_digest ||
@@ -144,6 +147,7 @@ Result<bool> verify_holder_bound_envelope_v1(const HolderBoundEnvelope& envelope
   if (!holder_identity(expected.request.identity) ||
       !holder_identity(expected.credential_identity) ||
       !holder_identity(expected.kb_identity) ||
+      expected.credential_identity.trust != expected.kb_identity.trust ||
       !identity_equal(expected.request.identity, expected.credential_identity) ||
       expected.credential_identity.circuit_digest ==
           expected.kb_identity.circuit_digest ||

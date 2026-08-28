@@ -150,7 +150,7 @@ bool FillFlatBearerDenseWitnessV1(
       witness.issuer.protected_header.size() != kHeaderChars ||
       witness.issuer.payload.size() > kPayloadChars ||
       witness.signing_input.size() > 64 * kSigningBlocks ||
-      witness.payload.issuer.size() > 255 || witness.payload.vct.size() > 255 ||
+      witness.payload.issuer.size() > 255 || witness.payload.vct.empty() || witness.payload.vct.size() > 32 ||
       witness.disclosures.size() != 1 ||
       witness.disclosures.front().size() != 42 ||
       witness.payload.digest.size() != 43)
@@ -197,6 +197,15 @@ bool FillFlatBearerDenseWitnessV1(
   if (disclosure_block_count != 1) return false;
   const auto disclosure_hash = sha256_ascii(witness.disclosures.front());
   const auto disclosure_digest_nat = to_nat(disclosure_hash);
+  std::array<std::uint8_t, 64> registry_vct_padded{};
+  std::array<proofs::FlatSHA256Witness::BlockWitness, 1> registry_vct_advice{};
+  std::uint8_t registry_vct_blocks{};
+  proofs::FlatSHA256Witness::transform_and_witness_message(
+      witness.payload.vct.size(),
+      reinterpret_cast<const std::uint8_t*>(witness.payload.vct.data()), 1,
+      registry_vct_blocks, registry_vct_padded.data(), registry_vct_advice.data());
+  if (registry_vct_blocks != 1) return false;
+  const auto registry_vct_nat = to_nat(sha256_ascii(witness.payload.vct));
 
   const auto digest_nat = to_nat(witness.signing_digest);
   const auto r_nat = to_nat(witness.issuer_signature.r);
@@ -219,6 +228,12 @@ bool FillFlatBearerDenseWitnessV1(
   filler.push_back(proofs::p256_base.of_scalar(policy_result));
   filler.push_back(public_x);
   filler.push_back(public_y);
+  const auto registry_x_nat = to_nat(witness.issuer_key.x);
+  const auto registry_y_nat = to_nat(witness.issuer_key.y);
+  for (std::size_t bit = 0; bit < 256; ++bit)
+    filler.push_back(proofs::p256_base.of_scalar(registry_x_nat.bit(bit)));
+  for (std::size_t bit = 0; bit < 256; ++bit)
+    filler.push_back(proofs::p256_base.of_scalar(registry_y_nat.bit(bit)));
   for (const auto byte : public_statement)
     filler.push_back(proofs::p256_base.of_scalar(byte));
   for (const auto byte : padded_signing) fill_v8(filler, byte);
@@ -284,6 +299,17 @@ bool FillFlatBearerDenseWitnessV1(
   fill_v8(filler, shape->name);
   fill_v8(filler, shape->value);
   fill_v8(filler, shape->total);
+  for (const auto byte : registry_vct_padded) fill_v8(filler, byte);
+  for (std::size_t word = 0; word < 48; ++word)
+    filler.push_back(encoder.mkpacked_v32(registry_vct_advice[0].outw[word]));
+  for (std::size_t word = 0; word < 64; ++word) {
+    filler.push_back(encoder.mkpacked_v32(registry_vct_advice[0].oute[word]));
+    filler.push_back(encoder.mkpacked_v32(registry_vct_advice[0].outa[word]));
+  }
+  for (std::size_t word = 0; word < 8; ++word)
+    filler.push_back(encoder.mkpacked_v32(registry_vct_advice[0].h1[word]));
+  for (std::size_t bit = 0; bit < 256; ++bit)
+    filler.push_back(proofs::p256_base.of_scalar(registry_vct_nat.bit(bit)));
   return filler.size() == inputs.n1_;
 }
 }  // namespace sd_jwt_zk
