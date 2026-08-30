@@ -80,6 +80,9 @@ if(BUILD_TESTING)
   add_executable(sd-jwt-zk-status-membership tests/cpp/status_membership_test.cc)
   target_link_libraries(sd-jwt-zk-status-membership PRIVATE SDJWTZK::sd-jwt-zk)
   add_test(NAME sd-jwt-zk-status-membership COMMAND sd-jwt-zk-status-membership)
+  add_test(NAME sd-jwt-zk-merkle-ownership-audit
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/merkle_ownership_audit.py
+      --install-prefix ${CMAKE_PREFIX_PATH})
   if(SD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS)
     add_executable(sd-jwt-zk-full-disclosure-32-compile tests/cpp/full_disclosure_32_compile.cc)
     target_link_libraries(sd-jwt-zk-full-disclosure-32-compile PRIVATE SDJWTZK::sd-jwt-zk)

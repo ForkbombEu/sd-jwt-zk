@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "policy": "European Longfellow owns reusable Google-derived cryptographic primitives; downstreams consume exported installed targets.",
+  "precedent": {
+    "primitive": "ECDSA circuit",
+    "owner": "LongfellowZKECDSA",
+    "consumer": "SDJWTZK",
+    "packageTarget": "LongfellowZKECDSA::ecdsa"
+  },
+  "primitives": [
+    {
+      "name": "native-tree-and-compressed-path",
+      "owner": "longfellow-zk",
+      "surface": ["src/merkle/merkle_tree.h", "src/merkle/merkle_commitment.h"],
+      "consumer": "sd-jwt-zk status test fixture only",
+      "rule": "MerkleTree constructs paths and MerkleTreeVerifier verifies them; SD-JWT has no local tree or path algorithm."
+    },
+    {
+      "name": "fixed-depth-circuit-membership",
+      "owner": "longfellow-zk",
+      "surface": ["src/circuits/merkle/fixed_depth_sha256_merkle_membership.h"],
+      "consumer": "include/sd_jwt_zk/status_membership.h",
+      "rule": "SD-JWT aliases and invokes the installed generic relation only."
+    },
+    {
+      "name": "sha256-and-bit-packing",
+      "owner": "longfellow-zk",
+      "surface": ["src/circuits/sha/flatsha256_circuit.h", "src/circuits/logic/bit_plucker.h"],
+      "consumer": "fixed-depth membership gadget",
+      "rule": "No SD-JWT SHA path circuit or packing duplicate is allowed."
+    },
+    {
+      "name": "path-adaptation-and-witness-generation",
+      "owner": "longfellow-zk",
+      "surface": ["FixedDepthSha256MerklePathAdapter", "FixedDepthSha256MerkleMembership::Witness"],
+      "consumer": "include/sd_jwt_zk/status_membership.h",
+      "rule": "The installed adapter host-verifies and converts one native compressed proof."
+    },
+    {
+      "name": "canonical-native-circuit-vectors",
+      "owner": "longfellow-zk",
+      "surface": ["test/merkle/canonical_merkle_membership_vectors.json"],
+      "consumer": "Longfellow qualification tests",
+      "rule": "SD-JWT maintains no divergent Merkle vector corpus."
+    },
+    {
+      "name": "status-leaf-and-snapshot-policy",
+      "owner": "sd-jwt-zk",
+      "surface": ["include/sd_jwt_zk/status_membership.h"],
+      "consumer": "SD-JWT application API",
+      "rule": "Leaf domain encoding, issuer binding, epoch, and validity window are application policy, not Merkle primitives."
+    }
+  ]
+}
