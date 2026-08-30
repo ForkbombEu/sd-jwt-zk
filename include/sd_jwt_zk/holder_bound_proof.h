@@ -76,6 +76,12 @@ Result<HolderBoundEnvelope> prove_holder_bound_v1(
     const HolderBoundVerifierPolicyV1& policy,
     const HolderCredentialWitnessV1& credential,
     const HolderKbWitnessV1& kb, const Limits& limits = {});
+Result<HolderBoundEnvelope> prove_holder_bound_v1(
+    const HolderBoundVerifierPolicyV1& policy,
+    const HolderCredentialWitnessV1& credential,
+    const HolderKbWitnessV1& kb,
+    const StatusMembershipWitnessV1& status_witness,
+    const Limits& limits = {});
 Result<bool> verify_holder_bound_v1(
     const HolderBoundEnvelope& envelope,
     const HolderBoundVerifierPolicyV1& expected, std::uint64_t now,

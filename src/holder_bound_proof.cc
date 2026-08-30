@@ -83,20 +83,31 @@ std::optional<P256Key> request_issuer_key(const Request& request) {
   return key;
 }
 
+void append_u32(Bytes& output, std::size_t value);
+
 bool valid_policy(const HolderBoundVerifierPolicyV1& policy) {
+  const auto issuer_key = request_issuer_key(policy.request);
   const bool exact = identity_equal(
                          policy.credential_identity,
                          holder_bound_credential_circuit_identity_v1()) &&
                      identity_equal(policy.kb_identity,
                                     holder_bound_kb_circuit_identity_v1()) &&
-                     request_issuer_key(policy.request).has_value();
+                     issuer_key.has_value();
+  const auto status = policy.request.status_public.empty()
+                          ? Result<StatusPolicyV1>::fail(
+                                ErrorCode::unsupported, "status absent")
+                          : decode_status_policy_v1(policy.request.status_public);
+  const bool valid_status = policy.request.status_public.empty() ||
+                            (status && issuer_key &&
+                             status.value->snapshot.issuer ==
+                                 status_issuer_v1(*issuer_key));
   return exact &&
          identity_equal(policy.request.identity,
                         policy.credential_identity) &&
          !policy.request.audience.empty() && !policy.request.nonce.empty() &&
          policy.request.policy == holder_bound_policy_v1() &&
          policy.request.policy_result == holder_bound_true_policy_result_v1() &&
-         policy.request.status_public.empty() &&
+         valid_status &&
          static_cast<bool>(encode_request(policy.request));
 }
 
@@ -285,6 +296,7 @@ struct HolderBoundCircuitProverV1::Impl {
   Bytes bridge_bytes;
   int phase{};
   bool valid{};
+  const char* invalid_reason{"uninitialized holder prover"};
 
   Impl(const HolderBoundVerifierPolicyV1& policy_in,
        const HolderCredentialWitnessV1& credential_in,
@@ -298,7 +310,7 @@ struct HolderBoundCircuitProverV1::Impl {
         credential_dense(1, credential_circuit->ninputs),
         kb_dense(1, runtime.kb_circuit->ninputs) {
     try {
-      if (!valid_policy(policy)) return;
+      if (!valid_policy(policy)) { invalid_reason = "invalid holder policy"; return; }
       const auto issuer = request_issuer_key(policy.request);
       const auto sd_hash = base64url_decode(kb_witness.claims.sd_hash, 64);
       if ((!issuer || issuer->x != credential_witness.credential.issuer_key.x ||
@@ -311,7 +323,7 @@ struct HolderBoundCircuitProverV1::Impl {
           !sd_hash || sd_hash.value->size() != 32 ||
           !std::equal(sd_hash.value->begin(), sd_hash.value->end(),
                       credential_witness.presentation_digest.begin()))
-        return;
+        { invalid_reason = "holder witness binding failed"; return; }
       proofs::MACReference<GF> mac;
       for (auto& randomness : bridge.randomness)
         mac.sample(randomness.data(), randomness.size(), &random);
@@ -323,11 +335,19 @@ struct HolderBoundCircuitProverV1::Impl {
       const bool credential_filled = FillHolderCredentialDenseWitnessV1(
           credential_dense, *credential_layout, credential_public,
           credential_witness, bridge.writer());
-      if (!credential_filled ||
-          !FillHolderKbDenseWitnessV1(kb_dense, runtime.kb_layout, kb_public,
-                                      kb_witness, bridge.writer()) ||
-          !bridge.captured)
+      if (!credential_filled) {
+        invalid_reason = "holder credential dense witness failed";
         return;
+      }
+      if (!FillHolderKbDenseWitnessV1(kb_dense, runtime.kb_layout, kb_public,
+                                      kb_witness, bridge.writer())) {
+        invalid_reason = "holder KB dense witness failed";
+        return;
+      }
+      if (!bridge.captured) {
+        invalid_reason = "holder bridge capture failed";
+        return;
+      }
       credential_proof = std::make_unique<proofs::ZkProof<Field>>(
           *credential_circuit, kRate, kQueries);
       kb_proof = std::make_unique<proofs::ZkProof<Field>>(
@@ -339,10 +359,11 @@ struct HolderBoundCircuitProverV1::Impl {
       kb_prover = std::make_unique<proofs::ZkProver<Field, ReedSolomon>>(
           *runtime.kb_circuit, proofs::p256_base, runtime.reed_solomon);
       const auto manifest = pair_manifest(policy);
-      if (manifest.empty()) return;
+      if (manifest.empty()) { invalid_reason = "holder manifest failed"; return; }
       shared_transcript = std::make_unique<proofs::Transcript>(
           manifest.data(), manifest.size());
       valid = true;
+      invalid_reason = "";
     } catch (const std::exception&) {
       valid = false;
     }
@@ -366,7 +387,8 @@ Result<Bytes> HolderBoundCircuitProverV1::commit(
     const Request& request) {
   if (!impl_ || !impl_->valid || !request_equal(request, impl_->policy.request))
     return Result<Bytes>::fail(ErrorCode::malformed,
-                               "invalid holder circuit prover state");
+                               impl_ && !impl_->valid ? impl_->invalid_reason
+                                                     : "invalid holder circuit prover state");
   if (component == HolderComponent::credential && impl_->phase == 0 &&
       identity_equal(identity, impl_->policy.credential_identity)) {
     impl_->credential_prover->commit(*impl_->credential_proof,
@@ -548,16 +570,60 @@ bool HolderBoundCircuitVerifierV1::verify(
   }
 }
 
-Result<HolderBoundEnvelope> prove_holder_bound_v1(
+Result<HolderBoundEnvelope> prove_holder_bound_impl_v1(
     const HolderBoundVerifierPolicyV1& policy,
     const HolderCredentialWitnessV1& credential,
-    const HolderKbWitnessV1& kb, const Limits& limits) {
+    const HolderKbWitnessV1& kb,
+    const StatusMembershipWitnessV1* status_witness, const Limits& limits) {
   if (!valid_policy(policy) ||
       policy.credential_identity.trust != Trust::exact_key)
     return Result<HolderBoundEnvelope>::fail(
         ErrorCode::unsupported, "unsupported holder-bound V1 policy");
-  HolderBoundCircuitProverV1 prover(policy, credential, kb);
-  return prove_holder_bound_envelope_v1(policy, prover, limits);
+  auto presentation_policy = policy;
+  presentation_policy.request.status_public.clear();
+  HolderBoundCircuitProverV1 prover(presentation_policy, credential, kb);
+  auto envelope = prove_holder_bound_envelope_v1(presentation_policy, prover,
+                                                  limits);
+  if (!envelope) return envelope;
+  envelope.value->request = policy.request;
+  if (!policy.request.status_public.empty()) {
+    if (!status_witness)
+      return Result<HolderBoundEnvelope>::fail(ErrorCode::malformed,
+                                                "status witness is required");
+    const auto status_policy = decode_status_policy_v1(policy.request.status_public);
+    if (!status_policy)
+      return Result<HolderBoundEnvelope>::fail(status_policy.error->code,
+                                                status_policy.error->message);
+    const auto binding = transcript_seed(policy.request);
+    auto status = prove_status_membership_v1(
+        status_policy.value->snapshot, status_policy.value->credential_id,
+        status_witness->private_index, status_witness->compressed_proof,
+        binding, limits);
+    if (!status)
+      return Result<HolderBoundEnvelope>::fail(status.error->code,
+                                                status.error->message);
+    envelope.value->status_proof = std::move(status.value->proof);
+  } else if (status_witness) {
+    return Result<HolderBoundEnvelope>::fail(ErrorCode::malformed,
+                                              "unexpected status witness");
+  }
+  return envelope;
+}
+
+Result<HolderBoundEnvelope> prove_holder_bound_v1(
+    const HolderBoundVerifierPolicyV1& policy,
+    const HolderCredentialWitnessV1& credential,
+    const HolderKbWitnessV1& kb, const Limits& limits) {
+  return prove_holder_bound_impl_v1(policy, credential, kb, nullptr, limits);
+}
+
+Result<HolderBoundEnvelope> prove_holder_bound_v1(
+    const HolderBoundVerifierPolicyV1& policy,
+    const HolderCredentialWitnessV1& credential,
+    const HolderKbWitnessV1& kb,
+    const StatusMembershipWitnessV1& status_witness, const Limits& limits) {
+  return prove_holder_bound_impl_v1(policy, credential, kb, &status_witness,
+                                    limits);
 }
 
 Result<bool> verify_holder_bound_v1(
@@ -568,8 +634,28 @@ Result<bool> verify_holder_bound_v1(
       expected.credential_identity.trust != Trust::exact_key)
     return Result<bool>::fail(ErrorCode::unsupported,
                               "unsupported holder-bound V1 policy");
+  if (!expected.request.status_public.empty()) {
+    const auto status_policy = decode_status_policy_v1(expected.request.status_public);
+    const auto issuer_key = request_issuer_key(expected.request);
+    if (!status_policy || !issuer_key)
+      return Result<bool>::fail(ErrorCode::malformed, "invalid status policy");
+    const auto binding = transcript_seed(expected.request);
+    const auto status = verify_status_membership_v1(
+        StatusMembershipProofV1{envelope.status_proof},
+        status_policy.value->snapshot, status_issuer_v1(*issuer_key),
+        status_policy.value->snapshot.epoch, status_policy.value->credential_id,
+        now, binding, limits);
+    if (!status)
+      return Result<bool>::fail(status.error->code, status.error->message);
+  }
   HolderBoundCircuitVerifierV1 verifier;
-  return verify_holder_bound_envelope_v1(envelope, expected, now, verifier,
+  auto presentation = envelope;
+  auto presentation_expected = expected;
+  presentation.request.status_public.clear();
+  presentation.status_proof.clear();
+  presentation_expected.request.status_public.clear();
+  return verify_holder_bound_envelope_v1(presentation, presentation_expected,
+                                         now, verifier,
                                          replay_store, limits);
 }
 

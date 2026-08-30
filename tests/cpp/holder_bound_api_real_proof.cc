@@ -3,7 +3,9 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "merkle/merkle_tree.h"
 #include "sd_jwt_zk/holder_bound_proof.h"
 
 namespace {
@@ -43,7 +45,7 @@ int main() {
     require(static_cast<bool>(issuer), "issuer key fixture rejected");
     const std::string presentation = std::string(kIssuer) + "~" +
                                      kDisclosure + "~";
-    const auto credential =
+    auto credential =
         sd_jwt_zk::holder_credential_witness_from_presentation_v1(
             presentation, *issuer.value);
     require(static_cast<bool>(credential), "credential witness rejected");
@@ -67,12 +69,35 @@ int main() {
                                 issuer.value->x.end());
     request.trust_public.insert(request.trust_public.end(), issuer.value->y.begin(),
                                 issuer.value->y.end());
+    constexpr std::uint64_t kCredentialId = 23;
+    const auto status_issuer = sd_jwt_zk::status_issuer_v1(*issuer.value);
+    const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
+        status_issuer, 5, kCredentialId,
+        sd_jwt_zk::CredentialStatusV1::valid);
+    const auto revoked_leaf = sd_jwt_zk::status_leaf_v1(
+        status_issuer, 5, kCredentialId,
+        sd_jwt_zk::CredentialStatusV1::revoked);
+    proofs::MerkleTree status_tree(4);
+    status_tree.set_leaf(0, revoked_leaf);
+    status_tree.set_leaf(1, revoked_leaf);
+    status_tree.set_leaf(2, valid_leaf);
+    status_tree.set_leaf(3, revoked_leaf);
+    const auto status_root = status_tree.build_tree();
+    const std::size_t status_index = 2;
+    std::vector<proofs::Digest> status_path;
+    status_tree.generate_compressed_proof(status_path, &status_index, 1);
+    request.status_public = sd_jwt_zk::encode_status_policy_v1(
+        {{status_issuer, status_root, 5, 1777334300, 1777334500},
+         kCredentialId});
+    const sd_jwt_zk::StatusMembershipWitnessV1 status_witness{status_index,
+                                                               status_path};
     const auto policy = sd_jwt_zk::holder_bound_verifier_policy_v1(request);
 
     const auto envelope = sd_jwt_zk::prove_holder_bound_v1(
-        policy, *credential.value, *kb.value);
-    require(static_cast<bool>(envelope),
-            "production holder-bound prover rejected fixture");
+        policy, *credential.value, *kb.value, status_witness);
+    if (!envelope)
+      throw std::runtime_error("production holder-bound prover rejected fixture: " +
+                               envelope.error->message);
     OneShotReplayStore replay;
     const auto accepted = sd_jwt_zk::verify_holder_bound_v1(
         *envelope.value, policy, 1777334400, replay);
@@ -97,6 +122,12 @@ int main() {
                 *envelope.value, changed_request, 1777334400,
                 changed_request_store),
             "production holder-bound verifier accepted audience substitution");
+    auto tampered_status = *envelope.value;
+    tampered_status.status_proof.back() ^= 1;
+    OneShotReplayStore tampered_status_store;
+    require(!sd_jwt_zk::verify_holder_bound_v1(
+                tampered_status, policy, 1777334400, tampered_status_store),
+            "production holder-bound verifier accepted invalid status proof");
     auto bearer_policy = policy;
     bearer_policy.request.identity.binding = sd_jwt_zk::Binding::bearer;
     OneShotReplayStore bearer_store;

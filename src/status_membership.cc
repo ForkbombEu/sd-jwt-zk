@@ -76,6 +76,12 @@ void append_u64(std::string& output, std::uint64_t value) {
     output.push_back(static_cast<char>((value >> shift) & 0xffu));
 }
 
+std::uint64_t read_u64(const Bytes& input, std::size_t offset) {
+  std::uint64_t value = 0;
+  for (std::size_t i = 0; i < 8; ++i) value = (value << 8) | input[offset + i];
+  return value;
+}
+
 std::array<std::uint8_t, 32> statement_digest(
     const StatusSnapshotPublicV1& snapshot, std::uint64_t credential_id,
     const std::array<std::uint8_t, 32>& presentation_binding) {
@@ -146,6 +152,46 @@ bool fill_witness(proofs::Dense<Field>& output,
 }
 
 }  // namespace
+
+std::array<std::uint8_t, 32> status_issuer_v1(const P256Key& issuer_key) {
+  std::string material{"sd-jwt-zk/status-issuer/v1"};
+  material.append(reinterpret_cast<const char*>(issuer_key.x.data()),
+                  issuer_key.x.size());
+  material.append(reinterpret_cast<const char*>(issuer_key.y.data()),
+                  issuer_key.y.size());
+  return sha256_ascii(material);
+}
+
+Bytes encode_status_policy_v1(const StatusPolicyV1& policy) {
+  Bytes output;
+  output.reserve(96);
+  output.insert(output.end(), policy.snapshot.issuer.begin(),
+                policy.snapshot.issuer.end());
+  output.insert(output.end(), policy.snapshot.root.data,
+                policy.snapshot.root.data + proofs::Digest::kLength);
+  for (const auto value : {policy.snapshot.epoch, policy.snapshot.valid_from,
+                           policy.snapshot.valid_until, policy.credential_id})
+    for (int shift = 56; shift >= 0; shift -= 8)
+      output.push_back(static_cast<std::uint8_t>(value >> shift));
+  return output;
+}
+
+Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded) {
+  if (encoded.size() != 96)
+    return Result<StatusPolicyV1>::fail(ErrorCode::noncanonical,
+                                        "invalid status policy encoding");
+  StatusPolicyV1 policy;
+  std::copy_n(encoded.begin(), 32, policy.snapshot.issuer.begin());
+  std::copy_n(encoded.begin() + 32, 32, policy.snapshot.root.data);
+  policy.snapshot.epoch = read_u64(encoded, 64);
+  policy.snapshot.valid_from = read_u64(encoded, 72);
+  policy.snapshot.valid_until = read_u64(encoded, 80);
+  policy.credential_id = read_u64(encoded, 88);
+  if (policy.snapshot.valid_from > policy.snapshot.valid_until)
+    return Result<StatusPolicyV1>::fail(ErrorCode::malformed,
+                                        "invalid status policy interval");
+  return Result<StatusPolicyV1>::ok(std::move(policy));
+}
 
 Result<StatusMembershipProofV1> prove_status_membership_v1(
     const StatusSnapshotPublicV1& snapshot, std::uint64_t credential_id,

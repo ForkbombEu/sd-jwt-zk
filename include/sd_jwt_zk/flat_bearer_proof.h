@@ -9,6 +9,7 @@
 #include "sd_jwt_zk/api.h"
 #include "sd_jwt_zk/issuer_jws_relation.h"
 #include "sd_jwt_zk/p256_coordinate_relation.h"
+#include "sd_jwt_zk/status_membership.h"
 #include "circuits/compiler/compiler.h"
 #include "circuits/logic/compiler_backend.h"
 #include "circuits/logic/logic.h"
@@ -98,6 +99,10 @@ Bytes flat_bearer_exact_key_trust_v1(const P256Key& issuer_key);
 Result<Envelope> prove_flat_bearer_v1(const Request& request,
                                      const FlatBearerWitness& witness,
                                      const Limits& limits = {});
+Result<Envelope> prove_flat_bearer_v1(
+    const Request& request, const FlatBearerWitness& witness,
+    const StatusMembershipWitnessV1& status_witness,
+    const Limits& limits = {});
 Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
                                   const Request& expected_request,
                                   std::uint64_t now,

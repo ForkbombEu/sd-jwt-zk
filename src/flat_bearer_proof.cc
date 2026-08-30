@@ -98,10 +98,37 @@ Result<bool> validate_request(const Request& request, const Limits& limits) {
   if (!request_issuer_key(request))
     return Result<bool>::fail(ErrorCode::malformed,
                               "exact-key trust must contain P-256 x and y");
-  if (!request.status_public.empty())
-    return Result<bool>::fail(ErrorCode::unsupported,
-                              "status is not supported by the V1 family");
+  if (!request.status_public.empty()) {
+    const auto status = decode_status_policy_v1(request.status_public);
+    const auto issuer = request_issuer_key(request);
+    if (!status || !issuer ||
+        status.value->snapshot.issuer != status_issuer_v1(*issuer))
+      return Result<bool>::fail(ErrorCode::malformed,
+                                "status policy issuer is not authorized");
+  }
   return Result<bool>::ok(true);
+}
+
+Bytes frame_status_proof(const Bytes& presentation, const Bytes& status) {
+  Bytes output;
+  output.reserve(4 + presentation.size() + status.size());
+  const auto size = static_cast<std::uint32_t>(presentation.size());
+  for (int shift = 24; shift >= 0; shift -= 8)
+    output.push_back(static_cast<std::uint8_t>(size >> shift));
+  output.insert(output.end(), presentation.begin(), presentation.end());
+  output.insert(output.end(), status.begin(), status.end());
+  return output;
+}
+
+bool split_status_proof(const Bytes& framed, Bytes* presentation, Bytes* status) {
+  if (framed.size() < 5) return false;
+  std::uint32_t size = 0;
+  for (std::size_t i = 0; i < 4; ++i) size = (size << 8) | framed[i];
+  if (size == 0 || size > framed.size() - 4 || size == framed.size() - 4)
+    return false;
+  presentation->assign(framed.begin() + 4, framed.begin() + 4 + size);
+  status->assign(framed.begin() + 4 + size, framed.end());
+  return true;
 }
 
 }  // namespace
@@ -130,9 +157,9 @@ Bytes flat_bearer_exact_key_trust_v1(const P256Key& issuer_key) {
   return trust;
 }
 
-Result<Envelope> prove_flat_bearer_v1(const Request& request,
-                                     const FlatBearerWitness& witness,
-                                     const Limits& limits) {
+Result<Envelope> prove_flat_bearer_impl_v1(
+    const Request& request, const FlatBearerWitness& witness,
+    const StatusMembershipWitnessV1* status_witness, const Limits& limits) {
   const auto valid = validate_request(request, limits);
   if (!valid)
     return Result<Envelope>::fail(valid.error->code, valid.error->message);
@@ -163,6 +190,22 @@ Result<Envelope> prove_flat_bearer_v1(const Request& request,
                                     "witness does not satisfy circuit");
     Bytes proof_bytes;
     proof.write(proof_bytes, proofs::p256_base);
+    if (!request.status_public.empty()) {
+      if (!status_witness)
+        return Result<Envelope>::fail(ErrorCode::malformed,
+                                      "status witness is required");
+      const auto policy = decode_status_policy_v1(request.status_public);
+      if (!policy) return Result<Envelope>::fail(policy.error->code, policy.error->message);
+      auto status = prove_status_membership_v1(
+          policy.value->snapshot, policy.value->credential_id,
+          status_witness->private_index, status_witness->compressed_proof,
+          statement, limits);
+      if (!status) return Result<Envelope>::fail(status.error->code, status.error->message);
+      proof_bytes = frame_status_proof(proof_bytes, status.value->proof);
+    } else if (status_witness) {
+      return Result<Envelope>::fail(ErrorCode::malformed,
+                                    "unexpected status witness");
+    }
     if (proof_bytes.empty() || proof_bytes.size() > limits.max_proof)
       return Result<Envelope>::fail(ErrorCode::limit,
                                     "proof exceeds configured bound");
@@ -171,6 +214,18 @@ Result<Envelope> prove_flat_bearer_v1(const Request& request,
     return Result<Envelope>::fail(ErrorCode::malformed,
                                   "proof construction failed");
   }
+}
+
+Result<Envelope> prove_flat_bearer_v1(const Request& request,
+                                     const FlatBearerWitness& witness,
+                                     const Limits& limits) {
+  return prove_flat_bearer_impl_v1(request, witness, nullptr, limits);
+}
+
+Result<Envelope> prove_flat_bearer_v1(
+    const Request& request, const FlatBearerWitness& witness,
+    const StatusMembershipWitnessV1& status_witness, const Limits& limits) {
+  return prove_flat_bearer_impl_v1(request, witness, &status_witness, limits);
 }
 
 Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
@@ -195,9 +250,23 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
   if (!issuer_key)
     return Result<bool>::fail(ErrorCode::malformed, "invalid issuer key");
   const auto statement = transcript_seed(expected_request);
+  Bytes presentation_proof = envelope.proof;
+  if (!expected_request.status_public.empty()) {
+    Bytes status_proof;
+    if (!split_status_proof(envelope.proof, &presentation_proof, &status_proof))
+      return Result<bool>::fail(ErrorCode::noncanonical,
+                                "invalid status proof framing");
+    const auto policy = decode_status_policy_v1(expected_request.status_public);
+    if (!policy) return Result<bool>::fail(policy.error->code, policy.error->message);
+    const auto verified = verify_status_membership_v1(
+        StatusMembershipProofV1{std::move(status_proof)}, policy.value->snapshot,
+        status_issuer_v1(*issuer_key), policy.value->snapshot.epoch,
+        policy.value->credential_id, now, statement, limits);
+    if (!verified) return Result<bool>::fail(verified.error->code, verified.error->message);
+  }
   try {
     auto& runtime = runtime_v1();
-    proofs::ReadBuffer reader(envelope.proof);
+    proofs::ReadBuffer reader(presentation_proof);
     proofs::ZkProof<Field> proof(*runtime.circuit, kRate, kQueries);
     if (!proof.read(reader, proofs::p256_base) || reader.remaining() != 0)
       return Result<bool>::fail(ErrorCode::noncanonical,

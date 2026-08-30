@@ -1,4 +1,5 @@
 #include "sd_jwt_zk/flat_bearer_proof.h"
+#include "merkle/merkle_tree.h"
 #include "util/log.h"
 
 #include <chrono>
@@ -55,7 +56,7 @@ int main() {
     const std::string presentation = issuer + "~" + kDisclosure + "~";
     const auto issuer_key = sd_jwt_zk::decode_p256_jwk(kX, kY);
     require(static_cast<bool>(issuer_key), "fixture issuer key rejected");
-    const auto witness = sd_jwt_zk::flat_bearer_witness_from_presentation(
+    auto witness = sd_jwt_zk::flat_bearer_witness_from_presentation(
         presentation, *issuer_key.value);
     require(static_cast<bool>(witness), "flat bearer witness rejected");
     sd_jwt_zk::Request request{
@@ -64,15 +65,36 @@ int main() {
         100, 200, sd_jwt_zk::flat_bearer_policy_v1(),
         sd_jwt_zk::flat_bearer_true_policy_result_v1(),
         sd_jwt_zk::flat_bearer_exact_key_trust_v1(*issuer_key.value), {}};
+    constexpr std::uint64_t kCredentialId = 17;
+    const auto status_issuer = sd_jwt_zk::status_issuer_v1(*issuer_key.value);
+    const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
+        status_issuer, 3, kCredentialId,
+        sd_jwt_zk::CredentialStatusV1::valid);
+    const auto revoked_leaf = sd_jwt_zk::status_leaf_v1(
+        status_issuer, 3, kCredentialId,
+        sd_jwt_zk::CredentialStatusV1::revoked);
+    proofs::MerkleTree status_tree(4);
+    status_tree.set_leaf(0, revoked_leaf);
+    status_tree.set_leaf(1, valid_leaf);
+    status_tree.set_leaf(2, revoked_leaf);
+    status_tree.set_leaf(3, revoked_leaf);
+    const auto status_root = status_tree.build_tree();
+    const std::size_t status_index = 1;
+    std::vector<proofs::Digest> status_path;
+    status_tree.generate_compressed_proof(status_path, &status_index, 1);
+    request.status_public = sd_jwt_zk::encode_status_policy_v1(
+        {{status_issuer, status_root, 3, 100, 200}, kCredentialId});
+    const sd_jwt_zk::StatusMembershipWitnessV1 status_witness{status_index,
+                                                               status_path};
 
     const auto prove_start = Clock::now();
     const auto envelope =
-        sd_jwt_zk::prove_flat_bearer_v1(request, *witness.value);
+        sd_jwt_zk::prove_flat_bearer_v1(request, *witness.value, status_witness);
     const auto prove_end = Clock::now();
     require(static_cast<bool>(envelope), "production prover failed");
     const auto rerandomize_start = Clock::now();
     const auto rerandomized =
-        sd_jwt_zk::prove_flat_bearer_v1(request, *witness.value);
+        sd_jwt_zk::prove_flat_bearer_v1(request, *witness.value, status_witness);
     const auto rerandomize_end = Clock::now();
     require(static_cast<bool>(rerandomized), "rerandomized prover failed");
     require(envelope.value->proof != rerandomized.value->proof,
@@ -138,6 +160,14 @@ int main() {
             "future request accepted");
     require(expect_reject(*envelope.value, request, 201),
             "expired request accepted");
+    auto wrong_status = request;
+    wrong_status.status_public.back() ^= 1;
+    require(expect_reject(*envelope.value, wrong_status, 150),
+            "wrong status credential binding accepted");
+    auto tampered_status = *envelope.value;
+    tampered_status.proof.back() ^= 1;
+    require(expect_reject(tampered_status, request, 150),
+            "invalid status proof accepted");
 
     auto unsupported = request;
     unsupported.identity.query_count += 1;

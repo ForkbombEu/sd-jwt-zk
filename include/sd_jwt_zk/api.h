@@ -42,6 +42,7 @@ struct HolderBoundEnvelope {
   Bytes bridge_public;
   Bytes credential_proof;
   Bytes kb_proof;
+  Bytes status_proof;
 };
 
 // Verification is deliberately an ordered operation.  Implementations receive

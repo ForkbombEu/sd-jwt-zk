@@ -36,7 +36,7 @@ int main(){
   CircuitIdentity kb_id=holder_id;kb_id.circuit_digest[0]=2;
   Request holder_request{holder_id,"https://verifier.example","holder-nonce",1,2,{1},{1},{}, {}};
   HolderBoundVerifierPolicyV1 holder_policy{holder_request,holder_id,kb_id};HolderProver holder_prover;auto produced=prove_holder_bound_envelope_v1(holder_policy,holder_prover);check(produced&&holder_prover.order==std::vector<int>({1,2,3,4,5}),"holder prover commits both components before bridge and proves in canonical order");
-  HolderBoundEnvelope holder_envelope=produced?*produced.value:HolderBoundEnvelope{holder_request,holder_id,kb_id,{1},{2},Bytes(112,3),{4},{5}};
+  HolderBoundEnvelope holder_envelope=produced?*produced.value:HolderBoundEnvelope{holder_request,holder_id,kb_id,{1},{2},Bytes(112,3),{4},{5},{}};
   auto holder_wire=encode_holder_bound_envelope(holder_envelope);check(holder_wire&&decode_holder_bound_envelope(*holder_wire.value),"ordered holder envelope round trip");
   if(holder_wire){for(size_t i=0;i<holder_wire.value->size();++i){Bytes cut(holder_wire.value->begin(),holder_wire.value->begin()+static_cast<long>(i));check(!decode_holder_bound_envelope(cut),"every holder envelope truncation rejects");}Bytes trailing=*holder_wire.value;trailing.push_back(0);check(!decode_holder_bound_envelope(trailing),"holder envelope trailing data rejects");}
   auto reversed=holder_envelope;std::swap(reversed.credential_identity,reversed.kb_identity);check(!encode_holder_bound_envelope(reversed),"holder component order is canonical");

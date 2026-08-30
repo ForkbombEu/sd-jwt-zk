@@ -148,15 +148,6 @@ bool FillHolderCredentialDenseWitnessV1(
       signing_padded.data(), signing_sha.data());
   if (signing_blocks != kSigningBlocks) return false;
 
-  std::array<std::uint8_t, 64> registry_vct_padded{};
-  std::array<proofs::FlatSHA256Witness::BlockWitness, 1> registry_vct_sha{};
-  std::uint8_t registry_vct_blocks{};
-  proofs::FlatSHA256Witness::transform_and_witness_message(
-      witness.credential.payload.vct.size(),
-      reinterpret_cast<const std::uint8_t*>(witness.credential.payload.vct.data()),
-      1, registry_vct_blocks, registry_vct_padded.data(), registry_vct_sha.data());
-  if (registry_vct_blocks != 1) return false;
-
   std::array<std::uint8_t, 64> disclosure_padded{};
   std::array<proofs::FlatSHA256Witness::BlockWitness, 1> disclosure_sha{};
   std::uint8_t disclosure_blocks{};
@@ -186,7 +177,6 @@ bool FillHolderCredentialDenseWitnessV1(
   const auto disclosure_nat =
       to_nat(witness.credential.disclosure_digests.front());
   const auto presentation_nat = to_nat(witness.presentation_digest);
-  const auto registry_vct_nat = to_nat(sha256_ascii(witness.credential.payload.vct));
   const auto issuer_x = proofs::p256_base.to_montgomery(
       to_nat(witness.credential.issuer_key.x));
   const auto issuer_y = proofs::p256_base.to_montgomery(
@@ -264,24 +254,6 @@ bool FillHolderCredentialDenseWitnessV1(
       to_nat(witness.credential.issuer_signature.s)));
   filler.push_back(holder_x);
   filler.push_back(holder_y);
-  const auto registry_issuer_x_nat = to_nat(witness.credential.issuer_key.x);
-  const auto registry_issuer_y_nat = to_nat(witness.credential.issuer_key.y);
-  for (std::size_t bit = 0; bit < 256; ++bit)
-    filler.push_back(proofs::p256_base.of_scalar(registry_issuer_x_nat.bit(bit)));
-  for (std::size_t bit = 0; bit < 256; ++bit)
-    filler.push_back(proofs::p256_base.of_scalar(registry_issuer_y_nat.bit(bit)));
-  for (const auto byte : registry_vct_padded) fill_v8(filler, byte);
-  proofs::BitPluckerEncoder<HolderKbFieldV1, 4> registry_encoder(proofs::p256_base);
-  for (std::size_t i = 0; i < 48; ++i)
-    filler.push_back(registry_encoder.mkpacked_v32(registry_vct_sha[0].outw[i]));
-  for (std::size_t i = 0; i < 64; ++i) {
-    filler.push_back(registry_encoder.mkpacked_v32(registry_vct_sha[0].oute[i]));
-    filler.push_back(registry_encoder.mkpacked_v32(registry_vct_sha[0].outa[i]));
-  }
-  for (std::size_t i = 0; i < 8; ++i)
-    filler.push_back(registry_encoder.mkpacked_v32(registry_vct_sha[0].h1[i]));
-  for (std::size_t i = 0; i < 256; ++i)
-    filler.push_back(proofs::p256_base.of_scalar(registry_vct_nat.bit(i)));
   if (filler.size() != layout.ranges[1].first) return false;
 
   for (std::size_t i = 0; i < kCompactChars; ++i)

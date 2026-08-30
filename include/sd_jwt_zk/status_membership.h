@@ -30,6 +30,20 @@ inline constexpr std::size_t kStatusMembershipDepthV1 = 2;
 // snapshot out of band, so proof bytes cannot select their own trust root.
 struct StatusMembershipProofV1 { Bytes proof; };
 
+struct StatusMembershipWitnessV1 {
+  std::size_t private_index{};
+  std::vector<proofs::Digest> compressed_proof;
+};
+
+struct StatusPolicyV1 {
+  StatusSnapshotPublicV1 snapshot;
+  std::uint64_t credential_id{};
+};
+
+std::array<std::uint8_t, 32> status_issuer_v1(const P256Key& issuer_key);
+Bytes encode_status_policy_v1(const StatusPolicyV1& policy);
+Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded);
+
 inline proofs::Digest status_leaf_v1(
     const std::array<std::uint8_t, 32>& issuer, std::uint64_t epoch,
     std::uint64_t credential_id, CredentialStatusV1 status) {
