@@ -87,10 +87,12 @@ void evaluate_relation(
 
 int main() {
   std::array<std::uint8_t, 32> issuer{}; issuer[0] = 7;
+  std::array<std::uint8_t, 32> valid_binding{}; valid_binding[0] = 9;
+  auto revoked_binding = valid_binding; revoked_binding.back() = 10;
   const auto valid = sd_jwt_zk::status_leaf_v1(
-      issuer, 4, 9, sd_jwt_zk::CredentialStatusV1::valid);
+      issuer, 4, valid_binding, sd_jwt_zk::CredentialStatusV1::valid);
   const auto revoked = sd_jwt_zk::status_leaf_v1(
-      issuer, 4, 10, sd_jwt_zk::CredentialStatusV1::revoked);
+      issuer, 4, revoked_binding, sd_jwt_zk::CredentialStatusV1::revoked);
   proofs::MerkleTree tree(4);
   tree.set_leaf(0, revoked); tree.set_leaf(1, valid);
   tree.set_leaf(2, revoked); tree.set_leaf(3, revoked);

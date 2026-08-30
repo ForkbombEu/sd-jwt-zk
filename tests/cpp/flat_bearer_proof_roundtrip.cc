@@ -65,14 +65,14 @@ int main() {
         100, 200, sd_jwt_zk::flat_bearer_policy_v1(),
         sd_jwt_zk::flat_bearer_true_policy_result_v1(),
         sd_jwt_zk::flat_bearer_exact_key_trust_v1(*issuer_key.value), {}};
-    const std::uint64_t kCredentialId =
-        sd_jwt_zk::status_credential_id_v1(witness.value->signing_digest);
+    const auto credential_binding =
+        sd_jwt_zk::status_credential_binding_v1(witness.value->signing_digest);
     const auto status_issuer = sd_jwt_zk::status_issuer_v1(*issuer_key.value);
     const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
-        status_issuer, 3, kCredentialId,
+        status_issuer, 3, credential_binding,
         sd_jwt_zk::CredentialStatusV1::valid);
     const auto revoked_leaf = sd_jwt_zk::status_leaf_v1(
-        status_issuer, 3, kCredentialId,
+        status_issuer, 3, credential_binding,
         sd_jwt_zk::CredentialStatusV1::revoked);
     proofs::MerkleTree status_tree(4);
     status_tree.set_leaf(0, revoked_leaf);
@@ -84,7 +84,7 @@ int main() {
     std::vector<proofs::Digest> status_path;
     status_tree.generate_compressed_proof(status_path, &status_index, 1);
     request.status_public = sd_jwt_zk::encode_status_policy_v1(
-        {{status_issuer, status_root, 3, 100, 200}, kCredentialId});
+        {{status_issuer, status_root, 3, 100, 200}, credential_binding});
     const sd_jwt_zk::StatusMembershipWitnessV1 status_witness{status_index,
                                                                status_path};
 
@@ -172,7 +172,7 @@ int main() {
     auto credential_b = request;
     auto credential_b_policy =
         *sd_jwt_zk::decode_status_policy_v1(request.status_public).value;
-    ++credential_b_policy.credential_id;
+    credential_b_policy.credential_binding.back() ^= 1;
     credential_b.status_public =
         sd_jwt_zk::encode_status_policy_v1(credential_b_policy);
     require(!sd_jwt_zk::prove_flat_bearer_v1(

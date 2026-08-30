@@ -148,6 +148,9 @@ Result<bool> verify_holder_bound_envelope_v1(const HolderBoundEnvelope& envelope
     const HolderBoundVerifierPolicyV1& expected, std::uint64_t now,
     HolderBoundProofVerifierV1& proof_verifier, HolderBoundReplayStoreV1& replay_store,
     const Limits& limits) {
+  if (envelope.request.status_public.empty() != envelope.status_proof.empty())
+    return Result<bool>::fail(ErrorCode::malformed,
+                              "status policy/proof mismatch");
   const auto shape = holder_shape(envelope, limits);
   if (!shape) return Result<bool>::fail(shape.error->code, shape.error->message);
   if (!holder_identity(expected.request.identity) ||

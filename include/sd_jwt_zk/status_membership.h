@@ -37,25 +37,28 @@ struct StatusMembershipWitnessV1 {
 
 struct StatusPolicyV1 {
   StatusSnapshotPublicV1 snapshot;
-  std::uint64_t credential_id{};
+  std::array<std::uint8_t, 32> credential_binding{};
 };
 
 std::array<std::uint8_t, 32> status_issuer_v1(const P256Key& issuer_key);
 Bytes encode_status_policy_v1(const StatusPolicyV1& policy);
 Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded);
-std::uint64_t status_credential_id_v1(
+std::array<std::uint8_t, 32> status_credential_binding_v1(
     const std::array<std::uint8_t, 32>& credential_digest);
 
 inline proofs::Digest status_leaf_v1(
     const std::array<std::uint8_t, 32>& issuer, std::uint64_t epoch,
-    std::uint64_t credential_id, CredentialStatusV1 status) {
+    const std::array<std::uint8_t, 32>& credential_binding,
+    CredentialStatusV1 status) {
   if (status != CredentialStatusV1::valid && status != CredentialStatusV1::revoked)
     throw std::invalid_argument("unknown credential status");
   std::string material{"sd-jwt-zk/status-leaf/v1"};
   material.append(reinterpret_cast<const char*>(issuer.data()), issuer.size());
-  for (const auto value : {epoch, credential_id})
+  for (const auto value : {epoch})
     for (int shift = 56; shift >= 0; shift -= 8)
       material.push_back(static_cast<char>(value >> shift));
+  material.append(reinterpret_cast<const char*>(credential_binding.data()),
+                  credential_binding.size());
   material.push_back(static_cast<char>(status));
   const auto digest = sha256_ascii(material);
   proofs::Digest result{};
@@ -88,7 +91,8 @@ using StatusMembershipCircuitV1 =
     proofs::FixedDepthSha256MerkleMembership<Logic, Depth>;
 
 Result<StatusMembershipProofV1> prove_status_membership_v1(
-    const StatusSnapshotPublicV1& snapshot, std::uint64_t credential_id,
+    const StatusSnapshotPublicV1& snapshot,
+    const std::array<std::uint8_t, 32>& credential_binding,
     std::size_t private_index,
     const std::vector<proofs::Digest>& compressed_proof,
     const std::array<std::uint8_t, 32>& presentation_binding,
@@ -98,7 +102,8 @@ Result<bool> verify_status_membership_v1(
     const StatusMembershipProofV1& proof,
     const StatusSnapshotPublicV1& trusted_snapshot,
     const std::array<std::uint8_t, 32>& expected_issuer,
-    std::uint64_t expected_epoch, std::uint64_t credential_id,
+    std::uint64_t expected_epoch,
+    const std::array<std::uint8_t, 32>& credential_binding,
     std::uint64_t now,
     const std::array<std::uint8_t, 32>& presentation_binding,
     const Limits& limits = {});

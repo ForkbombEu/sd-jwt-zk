@@ -79,8 +79,8 @@ BuildHolderCredentialCircuitV1(
   const auto av = logic.vinput<128>();
   const auto policy = logic.input();
   const auto status_required = logic.input();
-  std::array<L::v8, 8> status_id{};
-  for (auto& byte : status_id) byte = logic.template vinput<8>();
+  std::array<L::v8, 32> status_binding{};
+  for (auto& byte : status_binding) byte = logic.template vinput<8>();
   L::EltW issuer_x{}, issuer_y{};
   issuer_x = logic.eltw_input();
   issuer_y = logic.eltw_input();
@@ -162,12 +162,12 @@ BuildHolderCredentialCircuitV1(
       active_compact, disclosure, presentation_padded, presentation_w,
       presentation_digest, sd_hash};
   Presentation(logic).assert_valid(presentation);
-  for (std::size_t byte = 0; byte < status_id.size(); ++byte) {
+  for (std::size_t byte = 0; byte < status_binding.size(); ++byte) {
     L::v8 digest_byte{};
     for (std::size_t bit = 0; bit < 8; ++bit)
-      digest_byte[bit] = presentation_digest[(31 - byte) * 8 + bit];
+      digest_byte[bit] = digest_bits[(31 - byte) * 8 + bit];
     logic.assert_implies(status_required,
-                         logic.veq(status_id[byte], digest_byte));
+                         logic.veq(status_binding[byte], digest_byte));
   }
 #ifdef SD_JWT_ZK_HOLDER_FACTORY_METRICS
   stage("active-presentation-sha");

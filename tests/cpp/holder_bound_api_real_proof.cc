@@ -69,15 +69,15 @@ int main() {
                                 issuer.value->x.end());
     request.trust_public.insert(request.trust_public.end(), issuer.value->y.begin(),
                                 issuer.value->y.end());
-    const std::uint64_t kCredentialId =
-        sd_jwt_zk::status_credential_id_v1(
-            credential.value->presentation_digest);
+    const auto credential_binding =
+        sd_jwt_zk::status_credential_binding_v1(
+            credential.value->credential.signing_digest);
     const auto status_issuer = sd_jwt_zk::status_issuer_v1(*issuer.value);
     const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
-        status_issuer, 5, kCredentialId,
+        status_issuer, 5, credential_binding,
         sd_jwt_zk::CredentialStatusV1::valid);
     const auto revoked_leaf = sd_jwt_zk::status_leaf_v1(
-        status_issuer, 5, kCredentialId,
+        status_issuer, 5, credential_binding,
         sd_jwt_zk::CredentialStatusV1::revoked);
     proofs::MerkleTree status_tree(4);
     status_tree.set_leaf(0, revoked_leaf);
@@ -90,7 +90,7 @@ int main() {
     status_tree.generate_compressed_proof(status_path, &status_index, 1);
     request.status_public = sd_jwt_zk::encode_status_policy_v1(
         {{status_issuer, status_root, 5, 1777334300, 1777334500},
-         kCredentialId});
+         credential_binding});
     const sd_jwt_zk::StatusMembershipWitnessV1 status_witness{status_index,
                                                                status_path};
     const auto policy = sd_jwt_zk::holder_bound_verifier_policy_v1(request);
@@ -133,7 +133,7 @@ int main() {
     auto credential_b = policy;
     auto credential_b_status = *sd_jwt_zk::decode_status_policy_v1(
                                     policy.request.status_public).value;
-    ++credential_b_status.credential_id;
+    credential_b_status.credential_binding.back() ^= 1;
     credential_b.request.status_public =
         sd_jwt_zk::encode_status_policy_v1(credential_b_status);
     require(!sd_jwt_zk::prove_holder_bound_v1(

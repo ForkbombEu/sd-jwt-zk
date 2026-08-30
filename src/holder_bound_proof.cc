@@ -332,7 +332,8 @@ struct HolderBoundCircuitProverV1::Impl {
         const auto status = decode_status_policy_v1(policy.request.status_public);
         if (!status) return;
         credential_public.status_required = true;
-        credential_public.status_credential_id = status.value->credential_id;
+        credential_public.status_credential_binding =
+            status.value->credential_binding;
       }
       kb_public.audience = policy.request.audience;
       kb_public.nonce = policy.request.nonce;
@@ -563,7 +564,7 @@ bool HolderBoundCircuitVerifierV1::verify(
         const auto status = decode_status_policy_v1(request.status_public);
         if (!status) return false;
         inputs.status_required = true;
-        inputs.status_credential_id = status.value->credential_id;
+        inputs.status_credential_binding = status.value->credential_binding;
       }
       proofs::Dense<Field> dense(1, credential_circuit->npub_in);
       const auto issuer_key = request_issuer_key(request);
@@ -604,7 +605,7 @@ Result<HolderBoundEnvelope> prove_holder_bound_impl_v1(
                                                 status_policy.error->message);
     const auto binding = transcript_seed(policy.request);
     auto status = prove_status_membership_v1(
-        status_policy.value->snapshot, status_policy.value->credential_id,
+        status_policy.value->snapshot, status_policy.value->credential_binding,
         status_witness->private_index, status_witness->compressed_proof,
         binding, limits);
     if (!status)
@@ -651,7 +652,8 @@ Result<bool> verify_holder_bound_v1(
     const auto status = verify_status_membership_v1(
         StatusMembershipProofV1{envelope.status_proof},
         status_policy.value->snapshot, status_issuer_v1(*issuer_key),
-        status_policy.value->snapshot.epoch, status_policy.value->credential_id,
+        status_policy.value->snapshot.epoch,
+        status_policy.value->credential_binding,
         now, binding, limits);
     if (!status)
       return Result<bool>::fail(status.error->code, status.error->message);

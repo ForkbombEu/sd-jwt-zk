@@ -83,7 +83,8 @@ std::uint64_t read_u64(const Bytes& input, std::size_t offset) {
 }
 
 std::array<std::uint8_t, 32> statement_digest(
-    const StatusSnapshotPublicV1& snapshot, std::uint64_t credential_id,
+    const StatusSnapshotPublicV1& snapshot,
+    const std::array<std::uint8_t, 32>& credential_binding,
     const std::array<std::uint8_t, 32>& presentation_binding) {
   std::string material{"sd-jwt-zk/status-membership-proof/v1"};
   material.append(reinterpret_cast<const char*>(presentation_binding.data()),
@@ -95,7 +96,8 @@ std::array<std::uint8_t, 32> statement_digest(
   append_u64(material, snapshot.epoch);
   append_u64(material, snapshot.valid_from);
   append_u64(material, snapshot.valid_until);
-  append_u64(material, credential_id);
+  material.append(reinterpret_cast<const char*>(credential_binding.data()),
+                  credential_binding.size());
   return sha256_ascii(material);
 }
 
@@ -164,20 +166,22 @@ std::array<std::uint8_t, 32> status_issuer_v1(const P256Key& issuer_key) {
 
 Bytes encode_status_policy_v1(const StatusPolicyV1& policy) {
   Bytes output;
-  output.reserve(96);
+  output.reserve(120);
   output.insert(output.end(), policy.snapshot.issuer.begin(),
                 policy.snapshot.issuer.end());
   output.insert(output.end(), policy.snapshot.root.data,
                 policy.snapshot.root.data + proofs::Digest::kLength);
   for (const auto value : {policy.snapshot.epoch, policy.snapshot.valid_from,
-                           policy.snapshot.valid_until, policy.credential_id})
+                           policy.snapshot.valid_until})
     for (int shift = 56; shift >= 0; shift -= 8)
       output.push_back(static_cast<std::uint8_t>(value >> shift));
+  output.insert(output.end(), policy.credential_binding.begin(),
+                policy.credential_binding.end());
   return output;
 }
 
 Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded) {
-  if (encoded.size() != 96)
+  if (encoded.size() != 120)
     return Result<StatusPolicyV1>::fail(ErrorCode::noncanonical,
                                         "invalid status policy encoding");
   StatusPolicyV1 policy;
@@ -186,29 +190,28 @@ Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded) {
   policy.snapshot.epoch = read_u64(encoded, 64);
   policy.snapshot.valid_from = read_u64(encoded, 72);
   policy.snapshot.valid_until = read_u64(encoded, 80);
-  policy.credential_id = read_u64(encoded, 88);
+  std::copy_n(encoded.begin() + 88, 32, policy.credential_binding.begin());
   if (policy.snapshot.valid_from > policy.snapshot.valid_until)
     return Result<StatusPolicyV1>::fail(ErrorCode::malformed,
                                         "invalid status policy interval");
   return Result<StatusPolicyV1>::ok(std::move(policy));
 }
 
-std::uint64_t status_credential_id_v1(
+std::array<std::uint8_t, 32> status_credential_binding_v1(
     const std::array<std::uint8_t, 32>& credential_digest) {
-  std::uint64_t value = 0;
-  for (std::size_t i = 0; i < 8; ++i) value = (value << 8) | credential_digest[i];
-  return value;
+  return credential_digest;
 }
 
 Result<StatusMembershipProofV1> prove_status_membership_v1(
-    const StatusSnapshotPublicV1& snapshot, std::uint64_t credential_id,
+    const StatusSnapshotPublicV1& snapshot,
+    const std::array<std::uint8_t, 32>& credential_binding,
     std::size_t private_index,
     const std::vector<proofs::Digest>& compressed_proof,
     const std::array<std::uint8_t, 32>& presentation_binding,
     const Limits& limits) {
   try {
     const auto leaf = status_leaf_v1(snapshot.issuer, snapshot.epoch,
-                                     credential_id,
+                                     credential_binding,
                                      CredentialStatusV1::valid);
     const auto path = status_membership_path_v1<kStatusMembershipDepthV1>(
         snapshot, leaf, private_index, compressed_proof);
@@ -218,7 +221,7 @@ Result<StatusMembershipProofV1> prove_status_membership_v1(
       return Result<StatusMembershipProofV1>::fail(
           ErrorCode::malformed, "status witness encoding failed");
     const auto statement =
-        statement_digest(snapshot, credential_id, presentation_binding);
+        statement_digest(snapshot, credential_binding, presentation_binding);
     proofs::ZkProof<Field> proof(*state.circuit, kRate, kQueries);
     proofs::ZkProver<Field, ReedSolomon> prover(
         *state.circuit, proofs::p256_base, state.reed_solomon);
@@ -245,7 +248,8 @@ Result<bool> verify_status_membership_v1(
     const StatusMembershipProofV1& proof,
     const StatusSnapshotPublicV1& trusted_snapshot,
     const std::array<std::uint8_t, 32>& expected_issuer,
-    std::uint64_t expected_epoch, std::uint64_t credential_id,
+    std::uint64_t expected_epoch,
+    const std::array<std::uint8_t, 32>& credential_binding,
     std::uint64_t now,
     const std::array<std::uint8_t, 32>& presentation_binding,
     const Limits& limits) {
@@ -257,9 +261,9 @@ Result<bool> verify_status_membership_v1(
     return Result<bool>::fail(ErrorCode::limit, "invalid status proof size");
   try {
     const auto leaf = status_leaf_v1(expected_issuer, expected_epoch,
-                                     credential_id,
+                                     credential_binding,
                                      CredentialStatusV1::valid);
-    const auto statement = statement_digest(trusted_snapshot, credential_id,
+    const auto statement = statement_digest(trusted_snapshot, credential_binding,
                                             presentation_binding);
     auto& state = runtime();
     proofs::ReadBuffer reader(proof.proof);

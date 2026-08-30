@@ -62,8 +62,8 @@ Result<FlatBearerWitness> flat_bearer_witness_from_presentation(
 using FlatBearerField = proofs::Fp256Base;
 using FlatBearerBackend = proofs::CompilerBackend<FlatBearerField>;
 using FlatBearerLogic = proofs::Logic<FlatBearerField, FlatBearerBackend>;
-inline constexpr std::size_t kFlatBearerPublicInputsV1 = 101;
-inline constexpr std::size_t kFlatBearerDenseInputsV1 = 22521;
+inline constexpr std::size_t kFlatBearerPublicInputsV1 = 293;
+inline constexpr std::size_t kFlatBearerDenseInputsV1 = 22713;
 
 // Fills the exact wire order declared by BuildFlatBearerCircuitV1.  The full
 // witness begins with the compiler's constant-one input, the public statement,
@@ -75,13 +75,13 @@ bool FillFlatBearerDenseWitnessV1(
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
     const FlatBearerWitness& witness, bool status_required = false,
-    std::uint64_t status_credential_id = 0);
+    const std::array<std::uint8_t, 32>& status_credential_binding = {});
 bool FillFlatBearerPublicInputsV1(
     proofs::Dense<FlatBearerField>& inputs,
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
     const P256Key& issuer_key, bool status_required = false,
-    std::uint64_t status_credential_id = 0);
+    const std::array<std::uint8_t, 32>& status_credential_binding = {});
 
 class FlatBearerReplayStoreV1 {
  public:
@@ -159,8 +159,8 @@ inline void AllocateFlatBearerRelationV1WithSource(
   const auto public_x = allocation.element();
   const auto public_y = allocation.element();
   const auto public_status_required = allocation.bit();
-  std::array<typename LogicT::v8, 8> public_status_id{};
-  for (auto& byte : public_status_id) byte = allocation.template value<8>();
+  std::array<typename LogicT::v8, 32> public_status_binding{};
+  for (auto& byte : public_status_binding) byte = allocation.template value<8>();
   q->private_input();
   typename LogicT::template bitvec<256> registry_x_bits{}, registry_y_bits{};
   for (auto* coordinate : {&registry_x_bits, &registry_y_bits})
@@ -215,12 +215,12 @@ inline void AllocateFlatBearerRelationV1WithSource(
   if (payload_length_binding != nullptr) *payload_length_binding = payload_len;
   const auto explicit_sha = allocation.bit();
   const auto digest = allocation.element();
-  for (std::size_t byte = 0; byte < public_status_id.size(); ++byte) {
+  for (std::size_t byte = 0; byte < public_status_binding.size(); ++byte) {
     typename LogicT::template bitvec<8> digest_byte{};
     for (std::size_t bit = 0; bit < 8; ++bit)
       digest_byte[bit] = digest_bits[(31 - byte) * 8 + bit];
     logic.assert_implies(public_status_required,
-                         logic.veq(public_status_id[byte], digest_byte));
+                         logic.veq(public_status_binding[byte], digest_byte));
   }
   // The issuer-side bridge exports the exact signing-input SHA-256 bytes only
   // through the existing public statement.  A disclosure circuit may bind an

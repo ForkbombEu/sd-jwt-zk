@@ -178,13 +178,14 @@ Result<Envelope> prove_flat_bearer_impl_v1(
                                        ErrorCode::unsupported, "status absent")
                                  : decode_status_policy_v1(request.status_public);
   const bool status_required = static_cast<bool>(status_policy);
-  const std::uint64_t status_id =
-      status_required ? status_policy.value->credential_id : 0;
+  const std::array<std::uint8_t, 32> status_binding =
+      status_required ? status_policy.value->credential_binding
+                      : std::array<std::uint8_t, 32>{};
   try {
     auto& runtime = runtime_v1();
     proofs::Dense<Field> inputs(1, runtime.circuit->ninputs);
     if (!FillFlatBearerDenseWitnessV1(inputs, statement, result, witness,
-                                      status_required, status_id))
+                                      status_required, status_binding))
       return Result<Envelope>::fail(ErrorCode::malformed,
                                     "dense witness encoding failed");
     proofs::ZkProof<Field> proof(*runtime.circuit, kRate, kQueries);
@@ -205,7 +206,7 @@ Result<Envelope> prove_flat_bearer_impl_v1(
       const auto policy = decode_status_policy_v1(request.status_public);
       if (!policy) return Result<Envelope>::fail(policy.error->code, policy.error->message);
       auto status = prove_status_membership_v1(
-          policy.value->snapshot, policy.value->credential_id,
+          policy.value->snapshot, policy.value->credential_binding,
           status_witness->private_index, status_witness->compressed_proof,
           statement, limits);
       if (!status) return Result<Envelope>::fail(status.error->code, status.error->message);
@@ -264,8 +265,9 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
                                  : decode_status_policy_v1(
                                        expected_request.status_public);
   const bool status_required = static_cast<bool>(status_policy);
-  const std::uint64_t status_id =
-      status_required ? status_policy.value->credential_id : 0;
+  const std::array<std::uint8_t, 32> status_binding =
+      status_required ? status_policy.value->credential_binding
+                      : std::array<std::uint8_t, 32>{};
   Bytes presentation_proof = envelope.proof;
   if (!expected_request.status_public.empty()) {
     Bytes status_proof;
@@ -277,7 +279,7 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
     const auto verified = verify_status_membership_v1(
         StatusMembershipProofV1{std::move(status_proof)}, policy.value->snapshot,
         status_issuer_v1(*issuer_key), policy.value->snapshot.epoch,
-        policy.value->credential_id, now, statement, limits);
+        policy.value->credential_binding, now, statement, limits);
     if (!verified) return Result<bool>::fail(verified.error->code, verified.error->message);
   }
   try {
@@ -289,7 +291,7 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
                                 "malformed or trailing proof bytes");
     proofs::Dense<Field> public_inputs(1, runtime.circuit->npub_in);
     if (!FillFlatBearerPublicInputsV1(public_inputs, statement, result,
-                                      *issuer_key, status_required, status_id))
+                                      *issuer_key, status_required, status_binding))
       return Result<bool>::fail(ErrorCode::malformed,
                                 "public input encoding failed");
     proofs::Transcript transcript(statement.data(), statement.size());
