@@ -43,6 +43,8 @@ struct StatusPolicyV1 {
 std::array<std::uint8_t, 32> status_issuer_v1(const P256Key& issuer_key);
 Bytes encode_status_policy_v1(const StatusPolicyV1& policy);
 Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded);
+std::uint64_t status_credential_id_v1(
+    const std::array<std::uint8_t, 32>& credential_digest);
 
 inline proofs::Digest status_leaf_v1(
     const std::array<std::uint8_t, 32>& issuer, std::uint64_t epoch,

@@ -69,7 +69,9 @@ int main() {
                                 issuer.value->x.end());
     request.trust_public.insert(request.trust_public.end(), issuer.value->y.begin(),
                                 issuer.value->y.end());
-    constexpr std::uint64_t kCredentialId = 23;
+    const std::uint64_t kCredentialId =
+        sd_jwt_zk::status_credential_id_v1(
+            credential.value->presentation_digest);
     const auto status_issuer = sd_jwt_zk::status_issuer_v1(*issuer.value);
     const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
         status_issuer, 5, kCredentialId,
@@ -128,6 +130,15 @@ int main() {
     require(!sd_jwt_zk::verify_holder_bound_v1(
                 tampered_status, policy, 1777334400, tampered_status_store),
             "production holder-bound verifier accepted invalid status proof");
+    auto credential_b = policy;
+    auto credential_b_status = *sd_jwt_zk::decode_status_policy_v1(
+                                    policy.request.status_public).value;
+    ++credential_b_status.credential_id;
+    credential_b.request.status_public =
+        sd_jwt_zk::encode_status_policy_v1(credential_b_status);
+    require(!sd_jwt_zk::prove_holder_bound_v1(
+                credential_b, *credential.value, *kb.value, status_witness),
+            "holder credential A proved status for credential B");
     auto bearer_policy = policy;
     bearer_policy.request.identity.binding = sd_jwt_zk::Binding::bearer;
     OneShotReplayStore bearer_store;

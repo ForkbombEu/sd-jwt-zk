@@ -328,6 +328,12 @@ struct HolderBoundCircuitProverV1::Impl {
       for (auto& randomness : bridge.randomness)
         mac.sample(randomness.data(), randomness.size(), &random);
       credential_public.policy_result = true;
+      if (!policy.request.status_public.empty()) {
+        const auto status = decode_status_policy_v1(policy.request.status_public);
+        if (!status) return;
+        credential_public.status_required = true;
+        credential_public.status_credential_id = status.value->credential_id;
+      }
       kb_public.audience = policy.request.audience;
       kb_public.nonce = policy.request.nonce;
       kb_public.time_min = policy.request.time_min;
@@ -553,6 +559,12 @@ bool HolderBoundCircuitVerifierV1::verify(
     fork_component(transcript, component);
     if (component == HolderComponent::credential) {
       HolderCredentialPublicInputsV1 inputs{tags, challenge, true};
+      if (!request.status_public.empty()) {
+        const auto status = decode_status_policy_v1(request.status_public);
+        if (!status) return false;
+        inputs.status_required = true;
+        inputs.status_credential_id = status.value->credential_id;
+      }
       proofs::Dense<Field> dense(1, credential_circuit->npub_in);
       const auto issuer_key = request_issuer_key(request);
       return issuer_key &&
@@ -579,13 +591,9 @@ Result<HolderBoundEnvelope> prove_holder_bound_impl_v1(
       policy.credential_identity.trust != Trust::exact_key)
     return Result<HolderBoundEnvelope>::fail(
         ErrorCode::unsupported, "unsupported holder-bound V1 policy");
-  auto presentation_policy = policy;
-  presentation_policy.request.status_public.clear();
-  HolderBoundCircuitProverV1 prover(presentation_policy, credential, kb);
-  auto envelope = prove_holder_bound_envelope_v1(presentation_policy, prover,
-                                                  limits);
+  HolderBoundCircuitProverV1 prover(policy, credential, kb);
+  auto envelope = prove_holder_bound_envelope_v1(policy, prover, limits);
   if (!envelope) return envelope;
-  envelope.value->request = policy.request;
   if (!policy.request.status_public.empty()) {
     if (!status_witness)
       return Result<HolderBoundEnvelope>::fail(ErrorCode::malformed,
@@ -649,13 +657,7 @@ Result<bool> verify_holder_bound_v1(
       return Result<bool>::fail(status.error->code, status.error->message);
   }
   HolderBoundCircuitVerifierV1 verifier;
-  auto presentation = envelope;
-  auto presentation_expected = expected;
-  presentation.request.status_public.clear();
-  presentation.status_proof.clear();
-  presentation_expected.request.status_public.clear();
-  return verify_holder_bound_envelope_v1(presentation, presentation_expected,
-                                         now, verifier,
+  return verify_holder_bound_envelope_v1(envelope, expected, now, verifier,
                                          replay_store, limits);
 }
 

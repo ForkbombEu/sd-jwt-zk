@@ -193,6 +193,13 @@ Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded) {
   return Result<StatusPolicyV1>::ok(std::move(policy));
 }
 
+std::uint64_t status_credential_id_v1(
+    const std::array<std::uint8_t, 32>& credential_digest) {
+  std::uint64_t value = 0;
+  for (std::size_t i = 0; i < 8; ++i) value = (value << 8) | credential_digest[i];
+  return value;
+}
+
 Result<StatusMembershipProofV1> prove_status_membership_v1(
     const StatusSnapshotPublicV1& snapshot, std::uint64_t credential_id,
     std::size_t private_index,

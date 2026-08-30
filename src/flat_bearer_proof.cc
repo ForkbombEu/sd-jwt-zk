@@ -173,10 +173,18 @@ Result<Envelope> prove_flat_bearer_impl_v1(
     return Result<Envelope>::fail(ErrorCode::malformed,
                                   "invalid policy result");
   const auto statement = transcript_seed(request);
+  const auto status_policy = request.status_public.empty()
+                                 ? Result<StatusPolicyV1>::fail(
+                                       ErrorCode::unsupported, "status absent")
+                                 : decode_status_policy_v1(request.status_public);
+  const bool status_required = static_cast<bool>(status_policy);
+  const std::uint64_t status_id =
+      status_required ? status_policy.value->credential_id : 0;
   try {
     auto& runtime = runtime_v1();
     proofs::Dense<Field> inputs(1, runtime.circuit->ninputs);
-    if (!FillFlatBearerDenseWitnessV1(inputs, statement, result, witness))
+    if (!FillFlatBearerDenseWitnessV1(inputs, statement, result, witness,
+                                      status_required, status_id))
       return Result<Envelope>::fail(ErrorCode::malformed,
                                     "dense witness encoding failed");
     proofs::ZkProof<Field> proof(*runtime.circuit, kRate, kQueries);
@@ -250,6 +258,14 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
   if (!issuer_key)
     return Result<bool>::fail(ErrorCode::malformed, "invalid issuer key");
   const auto statement = transcript_seed(expected_request);
+  const auto status_policy = expected_request.status_public.empty()
+                                 ? Result<StatusPolicyV1>::fail(
+                                       ErrorCode::unsupported, "status absent")
+                                 : decode_status_policy_v1(
+                                       expected_request.status_public);
+  const bool status_required = static_cast<bool>(status_policy);
+  const std::uint64_t status_id =
+      status_required ? status_policy.value->credential_id : 0;
   Bytes presentation_proof = envelope.proof;
   if (!expected_request.status_public.empty()) {
     Bytes status_proof;
@@ -273,7 +289,7 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
                                 "malformed or trailing proof bytes");
     proofs::Dense<Field> public_inputs(1, runtime.circuit->npub_in);
     if (!FillFlatBearerPublicInputsV1(public_inputs, statement, result,
-                                      *issuer_key))
+                                      *issuer_key, status_required, status_id))
       return Result<bool>::fail(ErrorCode::malformed,
                                 "public input encoding failed");
     proofs::Transcript transcript(statement.data(), statement.size());

@@ -65,7 +65,8 @@ int main() {
         100, 200, sd_jwt_zk::flat_bearer_policy_v1(),
         sd_jwt_zk::flat_bearer_true_policy_result_v1(),
         sd_jwt_zk::flat_bearer_exact_key_trust_v1(*issuer_key.value), {}};
-    constexpr std::uint64_t kCredentialId = 17;
+    const std::uint64_t kCredentialId =
+        sd_jwt_zk::status_credential_id_v1(witness.value->signing_digest);
     const auto status_issuer = sd_jwt_zk::status_issuer_v1(*issuer_key.value);
     const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
         status_issuer, 3, kCredentialId,
@@ -168,6 +169,15 @@ int main() {
     tampered_status.proof.back() ^= 1;
     require(expect_reject(tampered_status, request, 150),
             "invalid status proof accepted");
+    auto credential_b = request;
+    auto credential_b_policy =
+        *sd_jwt_zk::decode_status_policy_v1(request.status_public).value;
+    ++credential_b_policy.credential_id;
+    credential_b.status_public =
+        sd_jwt_zk::encode_status_policy_v1(credential_b_policy);
+    require(!sd_jwt_zk::prove_flat_bearer_v1(
+                credential_b, *witness.value, status_witness),
+            "credential A proved status for credential B");
 
     auto unsupported = request;
     unsupported.identity.query_count += 1;

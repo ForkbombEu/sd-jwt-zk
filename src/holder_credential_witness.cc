@@ -200,6 +200,10 @@ bool FillHolderCredentialDenseWitnessV1(
   proofs::fill_gf2k<proofs::GF2_128<>, HolderKbFieldV1>(
       public_inputs.bridge_challenge, filler, proofs::p256_base);
   filler.push_back(proofs::p256_base.of_scalar(public_inputs.policy_result));
+  filler.push_back(proofs::p256_base.of_scalar(public_inputs.status_required));
+  for (int shift = 56; shift >= 0; shift -= 8)
+    fill_v8(filler, static_cast<std::uint8_t>(
+                        public_inputs.status_credential_id >> shift));
   filler.push_back(issuer_x);
   filler.push_back(issuer_y);
   if (filler.size() != layout.public_inputs) return false;
@@ -306,6 +310,10 @@ bool FillHolderCredentialPublicInputsV1(
   proofs::fill_gf2k<proofs::GF2_128<>, HolderKbFieldV1>(
       public_inputs.bridge_challenge, filler, proofs::p256_base);
   filler.push_back(proofs::p256_base.of_scalar(public_inputs.policy_result));
+  filler.push_back(proofs::p256_base.of_scalar(public_inputs.status_required));
+  for (int shift = 56; shift >= 0; shift -= 8)
+    fill_v8(filler, static_cast<std::uint8_t>(
+                        public_inputs.status_credential_id >> shift));
   filler.push_back(proofs::p256_base.to_montgomery(to_nat(issuer_key.x)));
   filler.push_back(proofs::p256_base.to_montgomery(to_nat(issuer_key.y)));
   return filler.size() == inputs.n1_;

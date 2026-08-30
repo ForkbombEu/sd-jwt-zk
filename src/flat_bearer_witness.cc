@@ -122,7 +122,8 @@ bool FillFlatBearerPublicInputsV1(
     proofs::Dense<FlatBearerField>& inputs,
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
-    const P256Key& issuer_key) {
+    const P256Key& issuer_key, bool status_required,
+    std::uint64_t status_credential_id) {
   if (inputs.n0_ != 1 || inputs.n1_ != kFlatBearerPublicInputsV1)
     return false;
   proofs::DenseFiller<FlatBearerField> filler(inputs);
@@ -134,6 +135,9 @@ bool FillFlatBearerPublicInputsV1(
       proofs::p256_base.to_montgomery(to_nat(issuer_key.x)));
   filler.push_back(
       proofs::p256_base.to_montgomery(to_nat(issuer_key.y)));
+  filler.push_back(proofs::p256_base.of_scalar(status_required));
+  for (int shift = 56; shift >= 0; shift -= 8)
+    fill_v8(filler, static_cast<std::uint8_t>(status_credential_id >> shift));
   return filler.size() == inputs.n1_;
 }
 
@@ -141,7 +145,8 @@ bool FillFlatBearerDenseWitnessV1(
     proofs::Dense<FlatBearerField>& inputs,
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
-    const FlatBearerWitness& witness) {
+    const FlatBearerWitness& witness, bool status_required,
+    std::uint64_t status_credential_id) {
   constexpr std::size_t kSigningBlocks = 5;
   constexpr std::size_t kHeaderChars = 102;
   constexpr std::size_t kPayloadChars = 140;
@@ -230,6 +235,9 @@ bool FillFlatBearerDenseWitnessV1(
   filler.push_back(proofs::p256_base.of_scalar(policy_result));
   filler.push_back(public_x);
   filler.push_back(public_y);
+  filler.push_back(proofs::p256_base.of_scalar(status_required));
+  for (int shift = 56; shift >= 0; shift -= 8)
+    fill_v8(filler, static_cast<std::uint8_t>(status_credential_id >> shift));
   const auto registry_x_nat = to_nat(witness.issuer_key.x);
   const auto registry_y_nat = to_nat(witness.issuer_key.y);
   for (std::size_t bit = 0; bit < 256; ++bit)

@@ -72,6 +72,9 @@ Result<HolderBoundEnvelope> decode_holder_bound_envelope(const Bytes&b,const Lim
   auto kb=decode_identity(*kb_bytes.value,l);
   if(!request||!credential||!kb)return Result<HolderBoundEnvelope>::fail(ErrorCode::malformed,"invalid holder proof envelope fields");
   HolderBoundEnvelope out{*request.value,*credential.value,*kb.value,*credential_commitment.value,*kb_commitment.value,*bridge.value,*credential_proof.value,*kb_proof.value,*status_proof.value};
+  if (out.request.status_public.empty() != out.status_proof.empty())
+    return Result<HolderBoundEnvelope>::fail(
+        ErrorCode::malformed, "status policy/proof mismatch");
   auto valid=holder_shape(out,l); if(!valid)return Result<HolderBoundEnvelope>::fail(valid.error->code,valid.error->message);
   return Result<HolderBoundEnvelope>::ok(std::move(out));
 }
