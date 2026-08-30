@@ -15,7 +15,6 @@
 #include "sd_jwt_zk/full_disclosure_circuit.h"
 #include "sd_jwt_zk/full_disclosure_layout.h"
 #include "sd_jwt_zk/bounded_json.h"
-#include "sd_jwt_zk/registry_bearer_proof.h"
 #include "util/readbuffer.h"
 #include "zk/zk_proof.h"
 #include "zk/zk_prover.h"
@@ -175,7 +174,6 @@ sd_jwt_zk::FullDisclosureAdviceV1<32> valid_advice() {
 
 template <sd_jwt_zk::Trust Trust>
 bool encode_advice(Encoder& e, const sd_jwt_zk::FullDisclosureAdviceV1<32>& a,
-                   const sd_jwt_zk::IssuerRegistryV1* registry,
                    const sd_jwt_zk::FlatBearerWitness& issuer_witness,
                    bool splice_signature, bool include_flat_bearer_tail = true) {
   for (const auto& digest : a.supplied) e.bytes(digest);
@@ -192,7 +190,7 @@ bool encode_advice(Encoder& e, const sd_jwt_zk::FullDisclosureAdviceV1<32>& a,
   e.bit(a.integer_result); e.bit(a.date_result); e.bytes(a.set_value);
   for (const auto& option : a.set_options) e.bytes(option); e.bit(a.set_result);
   e.bytes(a.issuer_key);
-  if constexpr (Trust == sd_jwt_zk::Trust::exact_key) e.bytes(a.exact_trust_key); else e.bytes(a.registry_authorized_key);
+  e.bytes(a.exact_trust_key);
   e.bytes(a.registry_root); e.bytes(a.registry_selected_root);
   e.bytes(a.credential_holder_key); e.bytes(a.kb_signer_key);
   e.bytes(a.presentation_hash); e.bytes(a.kb_sd_hash); e.bytes(a.challenge); e.bytes(a.kb_challenge);
@@ -307,19 +305,6 @@ bool encode_advice(Encoder& e, const sd_jwt_zk::FullDisclosureAdviceV1<32>& a,
       for (std::size_t bit = 0; bit < 8; ++bit) e.bit((hash[31-byte] >> bit) & 1U);
     e.byte(blocks);
   }
-  if constexpr (Trust == sd_jwt_zk::Trust::registry) {
-    if (registry == nullptr || registry->paths.empty()) return false;
-    const auto& path = registry->paths.front();
-    e.bytes(path.record.issuer_key.x); e.bytes(path.record.issuer_key.y);
-    e.bytes(registry->root);
-    const auto vct = sd_jwt_zk::sha256_ascii(path.record.vct);
-    for (std::size_t byte = 0; byte < 32; ++byte)
-      for (std::size_t bit = 0; bit < 8; ++bit) e.bit((vct[31 - byte] >> bit) & 1U);
-    e.bits<64>(registry->epoch); e.bits<64>(registry->valid_from);
-    e.bits<64>(registry->valid_until); e.bits<8>(registry->depth);
-    const auto trust = sd_jwt_zk::registry_trust_context_v1(*registry);
-    if (!sd_jwt_zk::AppendIssuerRegistryMembershipAdviceV1(e.out, trust, path)) return false;
-  }
   if (!include_flat_bearer_tail) return true;
   auto signed_witness = issuer_witness;
   if (splice_signature) signed_witness.issuer_signature.r[0] ^= 1;
@@ -346,16 +331,6 @@ sd_jwt_zk::Result<sd_jwt_zk::FlatBearerWitness> issuer_fixture() {
       std::string(header) + "." + payload + "." + signature + "~" +
           disclosure + "~",
       *key.value);
-}
-
-sd_jwt_zk::Result<sd_jwt_zk::IssuerRegistryV1> registry_fixture() {
-  const auto key = sd_jwt_zk::decode_p256_jwk(
-      "Jl-RmGfWH_k-UmeHbUnLL58NFLxBz6qOzZqP7z_qxY4",
-      "VBuaEu3T_57clPlJDLwm8xnw1PHFyR4kbXUHyGsK9TU");
-  if (!key) return sd_jwt_zk::Result<sd_jwt_zk::IssuerRegistryV1>::fail(
-      sd_jwt_zk::ErrorCode::malformed, "registry key fixture");
-  return sd_jwt_zk::build_issuer_registry_v1(
-      {{*key.value, "examp", 10, 20}}, 2, 7, 10, 20);
 }
 
 template <sd_jwt_zk::Binding Binding, sd_jwt_zk::Trust Trust>
@@ -401,24 +376,8 @@ int run(const char* mutation) {
       advice.supplied[i][0] = advice.references[i][0] =
           static_cast<std::uint8_t>(i + 1);
   }
-  auto registry = registry_fixture();
-  if constexpr (Trust == sd_jwt_zk::Trust::registry) {
-    if (!registry) return 6;
-    if (!std::strcmp(mutation, "wrong-root")) registry.value->root[0] ^= 1;
-    if (!std::strcmp(mutation, "wrong-path"))
-      registry.value->paths.front().sibling_is_left[0] =
-          !registry.value->paths.front().sibling_is_left[0];
-    std::copy_n(registry.value->paths.front().record.issuer_key.x.begin(),
-                advice.issuer_key.size(), advice.issuer_key.begin());
-    advice.registry_authorized_key = advice.issuer_key;
-    std::copy_n(registry.value->root.begin(), advice.registry_root.size(),
-                advice.registry_root.begin());
-    advice.registry_selected_root = advice.registry_root;
-    if (!std::strcmp(mutation, "wrong-issuer")) advice.issuer_key[0] ^= 1;
-  }
   Encoder encoder(inputs); if (!encode_json(encoder, json)) return 12;
   if (!encode_advice<Trust>(encoder, advice,
-                            registry ? &*registry.value : nullptr,
                             *issuer.value,
                             !std::strcmp(mutation, "signature-splice")))
     return expect_reject ? 0 : 7;
@@ -482,7 +441,5 @@ int main(int argc, char** argv) {
   const char* mutation = argc > 2 ? argv[2] : "";
   if (!std::strcmp(lane,"bearer-exact")) return run<sd_jwt_zk::Binding::bearer,sd_jwt_zk::Trust::exact_key>(mutation);
   if (!std::strcmp(lane,"holder-exact")) return run<sd_jwt_zk::Binding::holder_bound,sd_jwt_zk::Trust::exact_key>(mutation);
-  if (!std::strcmp(lane,"bearer-registry")) return run<sd_jwt_zk::Binding::bearer,sd_jwt_zk::Trust::registry>(mutation);
-  if (!std::strcmp(lane,"holder-registry")) return run<sd_jwt_zk::Binding::holder_bound,sd_jwt_zk::Trust::registry>(mutation);
   return 2;
 }

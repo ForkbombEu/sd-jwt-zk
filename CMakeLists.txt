@@ -22,6 +22,7 @@ add_library(sd-jwt-zk src/codec.cc src/native.cc src/restricted_json.cc src/boun
   src/swiss_claims.cc
   src/full_disclosure_family.cc
   src/sha256.cc src/flat_bearer_witness.cc src/flat_bearer_proof.cc
+  src/status_membership.cc
   src/holder_kb_witness.cc src/holder_credential_witness.cc
   src/holder_bound_proof.cc)
 add_library(SDJWTZK::sd-jwt-zk ALIAS sd-jwt-zk)
@@ -80,6 +81,14 @@ if(BUILD_TESTING)
   add_executable(sd-jwt-zk-status-membership tests/cpp/status_membership_test.cc)
   target_link_libraries(sd-jwt-zk-status-membership PRIVATE SDJWTZK::sd-jwt-zk)
   add_test(NAME sd-jwt-zk-status-membership COMMAND sd-jwt-zk-status-membership)
+  if(SD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS)
+    add_executable(sd-jwt-zk-status-membership-real-proof
+      tests/cpp/status_membership_real_proof.cc)
+    target_link_libraries(sd-jwt-zk-status-membership-real-proof
+      PRIVATE SDJWTZK::sd-jwt-zk)
+    add_test(NAME sd-jwt-zk-status-membership-real-proof
+      COMMAND sd-jwt-zk-status-membership-real-proof)
+  endif()
   add_test(NAME sd-jwt-zk-merkle-ownership-audit
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/merkle_ownership_audit.py
       --install-prefix ${CMAKE_PREFIX_PATH})

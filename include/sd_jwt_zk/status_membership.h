@@ -23,6 +23,13 @@ struct StatusSnapshotPublicV1 {
   std::uint64_t valid_until{};
 };
 
+inline constexpr std::size_t kStatusMembershipDepthV1 = 2;
+
+// A status proof is a second, presentation-bound proof component.  The
+// snapshot is deliberately absent: verification always receives the trusted
+// snapshot out of band, so proof bytes cannot select their own trust root.
+struct StatusMembershipProofV1 { Bytes proof; };
+
 inline proofs::Digest status_leaf_v1(
     const std::array<std::uint8_t, 32>& issuer, std::uint64_t epoch,
     std::uint64_t credential_id, CredentialStatusV1 status) {
@@ -63,5 +70,21 @@ inline proofs::FixedDepthSha256MerklePath<Depth> status_membership_path_v1(
 template <class Logic, std::size_t Depth>
 using StatusMembershipCircuitV1 =
     proofs::FixedDepthSha256MerkleMembership<Logic, Depth>;
+
+Result<StatusMembershipProofV1> prove_status_membership_v1(
+    const StatusSnapshotPublicV1& snapshot, std::uint64_t credential_id,
+    std::size_t private_index,
+    const std::vector<proofs::Digest>& compressed_proof,
+    const std::array<std::uint8_t, 32>& presentation_binding,
+    const Limits& limits = {});
+
+Result<bool> verify_status_membership_v1(
+    const StatusMembershipProofV1& proof,
+    const StatusSnapshotPublicV1& trusted_snapshot,
+    const std::array<std::uint8_t, 32>& expected_issuer,
+    std::uint64_t expected_epoch, std::uint64_t credential_id,
+    std::uint64_t now,
+    const std::array<std::uint8_t, 32>& presentation_binding,
+    const Limits& limits = {});
 
 }  // namespace sd_jwt_zk

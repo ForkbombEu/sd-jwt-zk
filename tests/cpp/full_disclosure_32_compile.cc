@@ -26,9 +26,5 @@ int main(int argc, char** argv) {
     return compile<sd_jwt_zk::Binding::bearer, sd_jwt_zk::Trust::exact_key>(medium);
   if (std::strcmp(lane, "holder-exact") == 0)
     return compile<sd_jwt_zk::Binding::holder_bound, sd_jwt_zk::Trust::exact_key>(medium);
-  if (std::strcmp(lane, "bearer-registry") == 0)
-    return compile<sd_jwt_zk::Binding::bearer, sd_jwt_zk::Trust::registry>(medium);
-  if (std::strcmp(lane, "holder-registry") == 0)
-    return compile<sd_jwt_zk::Binding::holder_bound, sd_jwt_zk::Trust::registry>(medium);
   return 2;
 }

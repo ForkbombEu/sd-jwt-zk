@@ -27,10 +27,5 @@ int main(int argc, char** argv) {
   if (std::strcmp(lane, "holder-exact") == 0)
     return compile<sd_jwt_zk::Binding::holder_bound,
                    sd_jwt_zk::Trust::exact_key>();
-  if (std::strcmp(lane, "bearer-registry") == 0)
-    return compile<sd_jwt_zk::Binding::bearer, sd_jwt_zk::Trust::registry>();
-  if (std::strcmp(lane, "holder-registry") == 0)
-    return compile<sd_jwt_zk::Binding::holder_bound,
-                   sd_jwt_zk::Trust::registry>();
   return 2;
 }

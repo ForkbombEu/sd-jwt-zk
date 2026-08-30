@@ -472,10 +472,6 @@ int main(int argc, char** argv) {
     accepted = run<sd_jwt_zk::Binding::bearer, sd_jwt_zk::Trust::exact_key>(mutation);
   else if (std::strcmp(lane, "holder-exact") == 0)
     accepted = run<sd_jwt_zk::Binding::holder_bound, sd_jwt_zk::Trust::exact_key>(mutation);
-  else if (std::strcmp(lane, "bearer-registry") == 0)
-    accepted = run<sd_jwt_zk::Binding::bearer, sd_jwt_zk::Trust::registry>(mutation);
-  else if (std::strcmp(lane, "holder-registry") == 0)
-    accepted = run<sd_jwt_zk::Binding::holder_bound, sd_jwt_zk::Trust::registry>(mutation);
   else return 2;
   const bool digest = digest_accepts(
       std::strcmp(mutation, "bad-digest-ascii") == 0,
