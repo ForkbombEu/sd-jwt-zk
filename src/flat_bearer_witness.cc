@@ -177,10 +177,12 @@ bool FillFlatBearerDenseWitnessV1(
   std::array<proofs::FlatSHA256Witness::BlockWitness, kSigningBlocks>
       sha_advice{};
   std::uint8_t sha_block_count = 0;
-  proofs::FlatSHA256Witness::transform_and_witness_message(
-      witness.signing_input.size(), witness.signing_input.data(),
-      kSigningBlocks, sha_block_count, padded_signing.data(),
-      sha_advice.data());
+  if (!make_compact_sha_advice(
+          std::string_view(reinterpret_cast<const char*>(
+                               witness.signing_input.data()),
+                           witness.signing_input.size()),
+          padded_signing, sha_advice, sha_block_count))
+    return false;
   // Header 102 + separator + payload at most 140 always occupies four SHA
   // blocks after canonical SHA-256 padding.  Block five remains zero-padded
   // advice and is still fully constrained by the circuit.
@@ -266,15 +268,15 @@ bool FillFlatBearerDenseWitnessV1(
     fill_v8(filler, i < decoded_payload.value->size()
                         ? (*decoded_payload.value)[i]
                         : 0);
+  fill_v8(filler,
+          static_cast<std::uint8_t>(witness.issuer.protected_header.size()));
+  fill_v8(filler, static_cast<std::uint8_t>(witness.issuer.payload.size()));
   fill_v8(filler, static_cast<std::uint8_t>(witness.payload.issuer.size()));
   fill_v8(filler, static_cast<std::uint8_t>(witness.payload.vct.size()));
   fill_v8(filler, static_cast<std::uint8_t>(decoded_payload.value->size()));
   filler.push_back(proofs::p256_base.of_scalar(witness.payload.explicit_sha256));
   filler.push_back(digest);
   ecdsa.fill_witness(filler);
-  fill_v8(filler,
-          static_cast<std::uint8_t>(witness.issuer.protected_header.size()));
-  fill_v8(filler, static_cast<std::uint8_t>(witness.issuer.payload.size()));
   for (const auto byte : witness.disclosures.front())
     fill_v8(filler, static_cast<std::uint8_t>(byte));
   for (const auto byte : padded_disclosure) fill_v8(filler, byte);

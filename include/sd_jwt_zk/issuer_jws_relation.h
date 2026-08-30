@@ -91,15 +91,23 @@ class IssuerJwsRelation {
     FlatDisclosureRelation<LogicCircuit, DisclosureBlocks, DisclosureChars>(logic_).assert_digest_match(disclosure);
   }
 
-  void assert_valid(const Input& in) const {
+  // Authenticates the bounded compact JWS while leaving payload semantics to
+  // a composing relation.  Full-disclosure families use their generic JSON
+  // parser against the exported decoded payload; flat V1 additionally calls
+  // assert_json below and therefore retains its fixed grammar.
+  void assert_compact_authenticated(const Input& in) const {
     assert_sha(in);
     assert_compact_binding(in);
     decode_payload_bucket(in.payload_b64, in.payload_b64_length,
                           in.payload_decoded);
     assert_padded_payload(in.payload_decoded, in.payload_padded);
     assert_header(in, in.header_decoded);
-    assert_json(in);
     assert_ecdsa(in);
+  }
+
+  void assert_valid(const Input& in) const {
+    assert_compact_authenticated(in);
+    assert_json(in);
   }
   void assert_sha(const Input& in) const {
     Sha sha(logic_);

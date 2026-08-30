@@ -1,4 +1,5 @@
 #include "sd_jwt_zk/api.h"
+#include "sd_jwt_zk/bounded_json.h"
 #include "sd_jwt_zk/issuer_registry.h"
 #include <algorithm>
 #include <atomic>
@@ -117,5 +118,28 @@ int main(){
   auto kb=parse_restricted_kb_jwt_payload(kb_json);check(kb&&kb.value->audience=="https://verifier.example"&&kb.value->nonce=="fresh-1"&&kb.value->issued_at==42,"restricted KB-JWT payload accepts complete canonical fields");
   check(!parse_restricted_kb_jwt_payload("{\"aud\":\"https://verifier.example\",\"nonce\":\"fresh-1\",\"iat\":042,\"sd_hash\":\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"}"),"restricted KB-JWT rejects noncanonical iat");
   check(!parse_restricted_kb_jwt_payload("{\"nonce\":\"fresh-1\",\"aud\":\"https://verifier.example\",\"iat\":42,\"sd_hash\":\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"}"),"restricted KB-JWT rejects reordered fields");
+  const auto general_json=parse_bounded_json(
+      " { \"nested\" : [true, null, -12.50e+1, {\"emoji\":\"\\uD83D\\uDE03\"}], \"text\":\"\\u00e9\" } ");
+  check(general_json&&general_json.value->kind==JsonKind::object&&general_json.value->members.size()==2&&
+        general_json.value->members[0].second.elements.size()==4&&
+        general_json.value->members[0].second.elements[3].members[0].second.scalar=="\xF0\x9F\x98\x83",
+        "bounded JSON accepts recursive arrays, objects, escapes, and Unicode");
+  check(general_json&&general_json.value->members[0].second.begin<general_json.value->members[0].second.end,
+        "bounded JSON retains authenticated source ranges");
+  check(json_number_equal("12.5","125e-1")&&json_number_equal("0","-0.000e99")&&
+        !json_number_equal("12.5","12.6")&&!json_number_equal("100000000000000000001","100000000000000000000"),
+        "bounded JSON compares numeric semantics");
+  check(json_number_equal("1e+1","10")&&
+        json_number_equal("1e18446744073709551616","10e18446744073709551615")&&
+        !json_number_equal("01","1")&&!json_number_equal("1e+","1"),
+        "bounded JSON number semantics are exact beyond machine exponents");
+  check(!parse_bounded_json("{\"x\":1,\"x\":2}"),"bounded JSON rejects duplicate object names");
+  check(!parse_bounded_json("[1,]"),"bounded JSON rejects trailing array comma");
+  check(!parse_bounded_json("\"\\uD800\""),"bounded JSON rejects unpaired surrogate");
+  check(!parse_bounded_json("\"\xC0\x80\""),"bounded JSON rejects overlong UTF-8");
+  check(!parse_bounded_json("01"),"bounded JSON rejects leading-zero number");
+  check(!parse_bounded_json("{}x"),"bounded JSON rejects hidden trailing bytes");
+  JsonLimits shallow{};shallow.max_depth=1;check(!parse_bounded_json("[[0]]",shallow),"bounded JSON enforces depth bucket");
+  JsonLimits tiny{};tiny.max_tokens=2;check(!parse_bounded_json("[0,1]",tiny),"bounded JSON enforces token bucket");
   check(native_parsing_is_not_proof_verification(),"native parsing disclaimer");return failed?1:0;
 }

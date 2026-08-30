@@ -9,9 +9,10 @@
 
 namespace sd_jwt_zk {
 
-// Fixed-depth SHA-256 issuer registry membership.  It is deliberately a
-// project-owned relation: Longfellow's Merkle code commits proof internals and
-// is not an issuer authorization tree.
+// Fixed-depth SHA-256 issuer registry membership. It is deliberately
+// project-owned experimental compatibility code pending migration to the
+// planned upstream Longfellow Merkle gadget; it is not the desired final
+// release primitive.
 template <class LogicCircuit, std::size_t Depth>
 class IssuerRegistryMembershipRelation {
   using v8 = typename LogicCircuit::v8;
@@ -125,5 +126,53 @@ class IssuerRegistryMembershipRelation {
   }
   const LogicCircuit& logic_;
 };
+
+template <class Logic, std::size_t Depth>
+void AllocateAndAssertIssuerRegistryMembership(
+    Logic& logic, const std::array<typename Logic::v8, 32>& issuer_x,
+    const std::array<typename Logic::v8, 32>& issuer_y,
+    const typename Logic::v256& vct_digest,
+    const std::array<typename Logic::v8, 32>& root,
+    const typename Logic::template bitvec<64>& epoch,
+    const typename Logic::template bitvec<64>& valid_from,
+    const typename Logic::template bitvec<64>& valid_until,
+    const typename Logic::template bitvec<8>& depth) {
+  using Relation = IssuerRegistryMembershipRelation<Logic, Depth>;
+  using Sha = proofs::FlatSHA256Circuit<Logic, proofs::BitPlucker<Logic, 4>>;
+  const auto not_before_bits = logic.template vinput<64>();
+  const auto not_after_bits = logic.template vinput<64>();
+  const auto private_epoch = logic.template vinput<64>();
+  const auto leaf_index = logic.template vinput<Depth>();
+  std::array<typename Logic::v8, 8> not_before{}, not_after{};
+  for (auto* value : {&not_before, &not_after})
+    for (auto& byte : *value) byte = logic.template vinput<8>();
+  std::array<typename Logic::v8, 192> leaf_message{};
+  for (auto& byte : leaf_message) byte = logic.template vinput<8>();
+  std::array<typename Sha::BlockWitness, 3> leaf_witness{};
+  for (auto& block : leaf_witness) block.input(logic);
+  typename Logic::v256 leaf_digest{};
+  for (auto& bit : leaf_digest) bit = logic.input();
+  std::array<std::array<typename Logic::v8, 32>, Depth> siblings{};
+  for (auto& sibling : siblings)
+    for (auto& byte : sibling) byte = logic.template vinput<8>();
+  std::array<typename Logic::BitW, Depth> directions{};
+  for (std::size_t i = 0; i < Depth; ++i) directions[i] = leaf_index[i];
+  std::array<std::array<typename Logic::v8, 128>, Depth> node_messages{};
+  std::array<std::array<typename Sha::BlockWitness, 2>, Depth> node_witnesses{};
+  std::array<typename Logic::v256, Depth> node_digests{};
+  for (std::size_t level = 0; level < Depth; ++level) {
+    for (auto& byte : node_messages[level]) byte = logic.template vinput<8>();
+    for (auto& block : node_witnesses[level]) block.input(logic);
+    for (auto& bit : node_digests[level]) bit = logic.input();
+  }
+  typename Relation::Hash3 leaf{leaf_message, leaf_witness, leaf_digest};
+  std::array<typename Relation::Hash2, Depth> nodes{
+      typename Relation::Hash2{node_messages[0], node_witnesses[0], node_digests[0]},
+      typename Relation::Hash2{node_messages[1], node_witnesses[1], node_digests[1]}};
+  Relation(logic).assert_valid(typename Relation::Input{
+      issuer_x, issuer_y, vct_digest, not_before, not_after, not_before_bits,
+      not_after_bits, private_epoch, leaf_index, leaf, siblings, directions,
+      nodes, root, epoch, valid_from, valid_until, depth});
+}
 
 }  // namespace sd_jwt_zk

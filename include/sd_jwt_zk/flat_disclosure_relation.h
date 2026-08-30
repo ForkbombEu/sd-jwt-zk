@@ -51,6 +51,21 @@ class FlatDisclosureRelation {
     for (std::size_t i = 0; i < ValueChars; ++i) assert_string_byte(json[value_at + i]);
   }
 
+  // RFC 9901 array-element disclosures use two items.  This separate relation
+  // prevents an object-property disclosure from being reused at an array
+  // placeholder merely because both carry a SHA-256 digest.
+  template <std::size_t SaltChars, std::size_t ValueChars>
+  void assert_two_string_array(const std::array<v8, 7 + SaltChars + ValueChars>& json) const {
+    constexpr std::size_t value_at = 5 + SaltChars;
+    logic_.vassert_eq(json[0], '['); logic_.vassert_eq(json[1], '"');
+    logic_.vassert_eq(json[2 + SaltChars], '"'); logic_.vassert_eq(json[3 + SaltChars], ',');
+    logic_.vassert_eq(json[4 + SaltChars], '"');
+    logic_.vassert_eq(json[value_at + ValueChars], '"');
+    logic_.vassert_eq(json[value_at + ValueChars + 1], ']');
+    for (std::size_t i = 0; i < SaltChars; ++i) assert_string_byte(json[2 + i]);
+    for (std::size_t i = 0; i < ValueChars; ++i) assert_string_byte(json[value_at + i]);
+  }
+
   // Active length selector for a configured disclosure family.  A selected
   // slot must be within capacity and all bytes above it are zero padding.
   template <std::size_t Capacity, class Index>
