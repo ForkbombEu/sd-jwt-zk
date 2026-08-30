@@ -10,7 +10,6 @@
 #include "sd_jwt_zk/swiss_policy_relation.h"
 #include "sd_jwt_zk/full_disclosure_family.h"
 #include "sd_jwt_zk/full_disclosure_layout.h"
-#include "sd_jwt_zk/issuer_registry_membership_relation.h"
 #include "sd_jwt_zk/flat_bearer_proof.h"
 
 namespace sd_jwt_zk {
@@ -351,18 +350,10 @@ void AssertFullDisclosureAdviceV1(const Logic& logic,
   // These are relation inputs, rather than verifier-side family labels.  The
   // conditional blocks deliberately change both the input layout and the
   // constraint graph for each binding/trust specialization.
-  if constexpr (ExpectedTrust == Trust::exact_key) {
-    for (std::size_t i = 0; i < advice.issuer_key.size(); ++i)
-      logic.vassert_eq(advice.issuer_key[i], advice.trust_key[i]);
-  } else {
-    // The selected authorization record carries the issuer key and is opened
-    // against the public registry commitment.  Full SHA-256 Merkle membership
-    // remains the responsibility of the established registry relation.
-    for (std::size_t i = 0; i < advice.issuer_key.size(); ++i)
-      logic.vassert_eq(advice.issuer_key[i], advice.trust_key[i]);
-    for (std::size_t i = 0; i < advice.trust_root.size(); ++i)
-      logic.vassert_eq(advice.trust_root[i], advice.selected_trust_root[i]);
-  }
+  static_assert(ExpectedTrust == Trust::exact_key,
+                "issuer-registry trust is not part of this release");
+  for (std::size_t i = 0; i < advice.issuer_key.size(); ++i)
+    logic.vassert_eq(advice.issuer_key[i], advice.trust_key[i]);
   if constexpr (ExpectedBinding == Binding::holder_bound) {
     for (std::size_t i = 0; i < advice.holder_key.size(); ++i)
       logic.vassert_eq(advice.holder_key[i], advice.kb_signer_key[i]);
@@ -423,24 +414,6 @@ BuildFullDisclosureBucketCircuitV1(proofs::QuadCircuit<proofs::Fp256Base>* q) {
       authenticated_payload_length});
   AssertFullDisclosureAdviceV1<ExpectedBinding, ExpectedTrust>(
       logic, *advice, &authenticated_payload, &authenticated_payload_length);
-  if constexpr (ExpectedTrust == Trust::registry) {
-    std::array<typename Logic::v8, 32> issuer_x{}, issuer_y{}, root{};
-    for (auto* coordinate : {&issuer_x, &issuer_y, &root})
-      for (auto& byte : *coordinate) byte = source.byte();
-    typename Logic::v256 vct_digest{};
-    for (auto& bit : vct_digest) bit = source.bit();
-    const auto epoch = logic.template vinput<64>();
-    const auto valid_from = logic.template vinput<64>();
-    const auto valid_until = logic.template vinput<64>();
-    const auto depth = logic.template vinput<8>();
-    for (std::size_t i = 0; i < advice->issuer_key.size(); ++i)
-      logic.vassert_eq(advice->issuer_key[i], issuer_x[i]);
-    for (std::size_t i = 0; i < advice->trust_root.size(); ++i)
-      logic.vassert_eq(advice->trust_root[i], root[i]);
-    AllocateAndAssertIssuerRegistryMembership<Logic, 2>(
-        logic, issuer_x, issuer_y, vct_digest, root, epoch, valid_from,
-        valid_until, depth);
-  }
   return q->mkcircuit(1);
 }
 template <Binding ExpectedBinding = Binding::bearer,

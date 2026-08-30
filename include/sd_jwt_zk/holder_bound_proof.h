@@ -13,12 +13,9 @@ namespace sd_jwt_zk {
 // the distinct KB identity alongside it.
 CircuitIdentity holder_bound_credential_circuit_identity_v1();
 CircuitIdentity holder_bound_kb_circuit_identity_v1();
-CircuitIdentity holder_registry_credential_circuit_identity_v1();
-CircuitIdentity holder_registry_kb_circuit_identity_v1();
 Bytes holder_bound_policy_v1();
 Bytes holder_bound_true_policy_result_v1();
 HolderBoundVerifierPolicyV1 holder_bound_verifier_policy_v1(Request request);
-HolderBoundVerifierPolicyV1 holder_registry_verifier_policy_v1(Request request);
 
 struct HolderBoundCircuitMetricsV1 {
   std::size_t credential_public_inputs{};
@@ -29,7 +26,6 @@ struct HolderBoundCircuitMetricsV1 {
   std::size_t kb_terms{};
 };
 HolderBoundCircuitMetricsV1 holder_bound_circuit_metrics_v1();
-HolderBoundCircuitMetricsV1 holder_registry_circuit_metrics_v1();
 
 // Concrete installed-library adapter for the ordered callback protocol in
 // api.h.  It owns the real circuits, Dense witnesses, commitments and
@@ -39,10 +35,6 @@ class HolderBoundCircuitProverV1 final : public HolderBoundProofProverV1 {
   HolderBoundCircuitProverV1(
       const HolderBoundVerifierPolicyV1& policy,
       const HolderCredentialWitnessV1& credential,
-      const HolderKbWitnessV1& kb);
-  HolderBoundCircuitProverV1(
-      const HolderBoundVerifierPolicyV1& policy,
-      const HolderRegistryCredentialWitnessV1& credential,
       const HolderKbWitnessV1& kb);
   ~HolderBoundCircuitProverV1() override;
   HolderBoundCircuitProverV1(HolderBoundCircuitProverV1&&) noexcept;
@@ -85,14 +77,6 @@ Result<HolderBoundEnvelope> prove_holder_bound_v1(
     const HolderCredentialWitnessV1& credential,
     const HolderKbWitnessV1& kb, const Limits& limits = {});
 Result<bool> verify_holder_bound_v1(
-    const HolderBoundEnvelope& envelope,
-    const HolderBoundVerifierPolicyV1& expected, std::uint64_t now,
-    HolderBoundReplayStoreV1& replay_store, const Limits& limits = {});
-Result<HolderBoundEnvelope> prove_holder_registry_bound_v1(
-    const HolderBoundVerifierPolicyV1& policy,
-    const HolderRegistryCredentialWitnessV1& credential,
-    const HolderKbWitnessV1& kb, const Limits& limits = {});
-Result<bool> verify_holder_registry_bound_v1(
     const HolderBoundEnvelope& envelope,
     const HolderBoundVerifierPolicyV1& expected, std::uint64_t now,
     HolderBoundReplayStoreV1& replay_store, const Limits& limits = {});

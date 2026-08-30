@@ -7,7 +7,6 @@
 #include "circuits/logic/bit_plucker_encoder.h"
 #include "circuits/mac/mac_reference.h"
 #include "circuits/sha/flatsha256_witness.h"
-#include "sd_jwt_zk/registry_bearer_proof.h"
 
 namespace sd_jwt_zk {
 namespace {
@@ -338,105 +337,6 @@ bool FillHolderCredentialPublicInputsV1(
   filler.push_back(proofs::p256_base.to_montgomery(to_nat(issuer_key.x)));
   filler.push_back(proofs::p256_base.to_montgomery(to_nat(issuer_key.y)));
   return filler.size() == inputs.n1_;
-}
-
-Result<HolderRegistryCredentialWitnessV1>
-holder_registry_credential_witness_from_presentation_v1(
-    std::string_view presentation, const IssuerRegistryPathV1& authorization,
-    const Limits& limits) {
-  if (authorization.siblings.size() != kIssuerRegistryDepthV1 ||
-      authorization.sibling_is_left.size() != kIssuerRegistryDepthV1)
-    return Result<HolderRegistryCredentialWitnessV1>::fail(
-        ErrorCode::malformed, "invalid holder registry authorization path");
-  auto credential = holder_credential_witness_from_presentation_v1(
-      presentation, authorization.record.issuer_key, limits);
-  if (!credential)
-    return Result<HolderRegistryCredentialWitnessV1>::fail(
-        credential.error->code, credential.error->message);
-  if (credential.value->credential.payload.vct != authorization.record.vct)
-    return Result<HolderRegistryCredentialWitnessV1>::fail(
-        ErrorCode::malformed, "holder credential type is not authorized");
-  return Result<HolderRegistryCredentialWitnessV1>::ok(
-      HolderRegistryCredentialWitnessV1{std::move(*credential.value),
-                                        authorization});
-}
-
-bool FillHolderRegistryCredentialPublicInputsV1(
-    proofs::Dense<HolderKbFieldV1>& inputs,
-    const HolderRegistryCredentialPublicInputsV1& public_inputs) {
-  if (inputs.n0_ != 1 ||
-      public_inputs.trust.depth != kIssuerRegistryDepthV1 ||
-      public_inputs.trust.valid_from > public_inputs.trust.valid_until)
-    return false;
-  proofs::DenseFiller<HolderKbFieldV1> filler(inputs);
-  filler.push_back(proofs::p256_base.one());
-  for (const auto& tag : public_inputs.holder.bridge_tags)
-    proofs::fill_gf2k<proofs::GF2_128<>, HolderKbFieldV1>(
-        tag, filler, proofs::p256_base);
-  proofs::fill_gf2k<proofs::GF2_128<>, HolderKbFieldV1>(
-      public_inputs.holder.bridge_challenge, filler, proofs::p256_base);
-  filler.push_back(
-      proofs::p256_base.of_scalar(public_inputs.holder.policy_result));
-  for (const auto byte : public_inputs.trust.root) fill_v8(filler, byte);
-  filler.push_back(public_inputs.trust.epoch, 64, proofs::p256_base);
-  filler.push_back(public_inputs.trust.valid_from, 64, proofs::p256_base);
-  filler.push_back(public_inputs.trust.valid_until, 64, proofs::p256_base);
-  filler.push_back(public_inputs.trust.depth, 8, proofs::p256_base);
-  return filler.size() == inputs.n1_;
-}
-
-bool FillHolderRegistryCredentialDenseWitnessV1(
-    proofs::Dense<HolderKbFieldV1>& inputs,
-    const HolderDenseLayoutV1& registry_layout,
-    const HolderDenseLayoutV1& exact_layout,
-    const HolderRegistryCredentialPublicInputsV1& public_inputs,
-    const HolderRegistryCredentialWitnessV1& witness,
-    const HolderKbBridgeWriterV1& bridge_writer) {
-  if (inputs.n0_ != 1 || inputs.n1_ != registry_layout.total_inputs ||
-      registry_layout.ranges.size() != 3 || exact_layout.ranges.size() != 3 ||
-      public_inputs.trust.depth != kIssuerRegistryDepthV1 ||
-      witness.authorization.record.issuer_key.x !=
-          witness.credential.credential.issuer_key.x ||
-      witness.authorization.record.issuer_key.y !=
-          witness.credential.credential.issuer_key.y ||
-      witness.authorization.record.vct !=
-          witness.credential.credential.payload.vct)
-    return false;
-  proofs::Dense<HolderKbFieldV1> exact(1, exact_layout.total_inputs);
-  if (!FillHolderCredentialDenseWitnessV1(
-          exact, exact_layout, public_inputs.holder, witness.credential,
-          bridge_writer))
-    return false;
-  proofs::DenseFiller<HolderKbFieldV1> filler(inputs);
-  filler.push_back(proofs::p256_base.one());
-  for (const auto& tag : public_inputs.holder.bridge_tags)
-    proofs::fill_gf2k<proofs::GF2_128<>, HolderKbFieldV1>(
-        tag, filler, proofs::p256_base);
-  proofs::fill_gf2k<proofs::GF2_128<>, HolderKbFieldV1>(
-      public_inputs.holder.bridge_challenge, filler, proofs::p256_base);
-  filler.push_back(
-      proofs::p256_base.of_scalar(public_inputs.holder.policy_result));
-  for (const auto byte : public_inputs.trust.root) fill_v8(filler, byte);
-  filler.push_back(public_inputs.trust.epoch, 64, proofs::p256_base);
-  filler.push_back(public_inputs.trust.valid_from, 64, proofs::p256_base);
-  filler.push_back(public_inputs.trust.valid_until, 64, proofs::p256_base);
-  filler.push_back(public_inputs.trust.depth, 8, proofs::p256_base);
-  if (filler.size() != registry_layout.public_inputs) return false;
-  filler.push_back(exact.v_[exact_layout.public_inputs - 2]);
-  filler.push_back(exact.v_[exact_layout.public_inputs - 1]);
-  const auto exact_issuer_end = exact_layout.ranges[0].first +
-                                exact_layout.ranges[0].count;
-  for (std::size_t i = exact_layout.public_inputs; i < exact_issuer_end; ++i)
-    filler.push_back(exact.v_[i]);
-  if (!AppendIssuerRegistryMembershipAdviceV1(
-          filler, public_inputs.trust, witness.authorization))
-    return false;
-  const auto registry_issuer_end = registry_layout.ranges[0].first +
-                                   registry_layout.ranges[0].count;
-  if (filler.size() != registry_issuer_end) return false;
-  for (std::size_t i = exact_issuer_end; i < exact.v_.size(); ++i)
-    filler.push_back(exact.v_[i]);
-  return filler.size() == registry_layout.total_inputs;
 }
 
 }  // namespace sd_jwt_zk

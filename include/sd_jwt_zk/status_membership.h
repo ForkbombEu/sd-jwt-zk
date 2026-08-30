@@ -1,0 +1,67 @@
+#pragma once
+
+#include <array>
+#include <cstdint>
+#include <stdexcept>
+#include <string_view>
+#include <vector>
+
+#include "circuits/merkle/fixed_depth_sha256_merkle_membership.h"
+#include "sd_jwt_zk/api.h"
+
+namespace sd_jwt_zk {
+
+// Application policy lives here; tree construction, proof verification, path
+// ordering, SHA witnesses, and root equality are owned by LongfellowZK.
+enum class CredentialStatusV1 : std::uint8_t { valid = 1, revoked = 2 };
+
+struct StatusSnapshotPublicV1 {
+  std::array<std::uint8_t, 32> issuer{};
+  proofs::Digest root{};
+  std::uint64_t epoch{};
+  std::uint64_t valid_from{};
+  std::uint64_t valid_until{};
+};
+
+inline proofs::Digest status_leaf_v1(
+    const std::array<std::uint8_t, 32>& issuer, std::uint64_t epoch,
+    std::uint64_t credential_id, CredentialStatusV1 status) {
+  if (status != CredentialStatusV1::valid && status != CredentialStatusV1::revoked)
+    throw std::invalid_argument("unknown credential status");
+  std::string material{"sd-jwt-zk/status-leaf/v1"};
+  material.append(reinterpret_cast<const char*>(issuer.data()), issuer.size());
+  for (const auto value : {epoch, credential_id})
+    for (int shift = 56; shift >= 0; shift -= 8)
+      material.push_back(static_cast<char>(value >> shift));
+  material.push_back(static_cast<char>(status));
+  const auto digest = sha256_ascii(material);
+  proofs::Digest result{};
+  for (std::size_t i = 0; i < result.kLength; ++i) result.data[i] = digest[i];
+  return result;
+}
+
+inline bool accepts_status_snapshot_v1(
+    const StatusSnapshotPublicV1& snapshot,
+    const std::array<std::uint8_t, 32>& expected_issuer,
+    std::uint64_t expected_epoch, std::uint64_t now) {
+  return snapshot.issuer == expected_issuer && snapshot.epoch == expected_epoch &&
+         snapshot.valid_from <= snapshot.valid_until &&
+         now >= snapshot.valid_from && now <= snapshot.valid_until;
+}
+
+template <std::size_t Depth>
+inline proofs::FixedDepthSha256MerklePath<Depth> status_membership_path_v1(
+    const StatusSnapshotPublicV1& snapshot, const proofs::Digest& leaf,
+    std::size_t private_index, const std::vector<proofs::Digest>& compressed_proof) {
+  // The upstream adapter host-verifies the supplied single-leaf proof before
+  // copying it into private circuit witness form and rejects bad root/index/path.
+  return proofs::FixedDepthSha256MerklePathAdapter<Depth>::from_single_leaf(
+      std::size_t{1} << Depth, snapshot.root, leaf, private_index,
+      compressed_proof);
+}
+
+template <class Logic, std::size_t Depth>
+using StatusMembershipCircuitV1 =
+    proofs::FixedDepthSha256MerkleMembership<Logic, Depth>;
+
+}  // namespace sd_jwt_zk

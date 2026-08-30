@@ -17,8 +17,7 @@ Result<Envelope> decode_envelope(const Bytes&b,const Limits&l){if(!limits(l,b.si
 namespace {
 bool holder_identity(const CircuitIdentity& identity) {
   return identity.binding == Binding::holder_bound &&
-         (identity.trust == Trust::exact_key ||
-          identity.trust == Trust::registry);
+         identity.trust == Trust::exact_key;
 }
 bool identity_equal(const CircuitIdentity& left, const CircuitIdentity& right) {
   return left.binding == right.binding && left.trust == right.trust &&

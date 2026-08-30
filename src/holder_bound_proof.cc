@@ -14,7 +14,6 @@
 #include "random/transcript.h"
 #include "sd_jwt_zk/holder_credential_circuit.h"
 #include "sd_jwt_zk/holder_kb_circuit.h"
-#include "sd_jwt_zk/registry_bearer_proof.h"
 #include "util/readbuffer.h"
 #include "zk/zk_proof.h"
 #include "zk/zk_prover.h"
@@ -37,10 +36,8 @@ struct RuntimeV1 {
   Fft fft;
   ReedSolomon reed_solomon;
   std::unique_ptr<proofs::Circuit<Field>> credential_circuit;
-  std::unique_ptr<proofs::Circuit<Field>> registry_credential_circuit;
   std::unique_ptr<proofs::Circuit<Field>> kb_circuit;
   HolderDenseLayoutV1 credential_layout;
-  HolderDenseLayoutV1 registry_credential_layout;
   HolderDenseLayoutV1 kb_layout;
 
   RuntimeV1()
@@ -52,9 +49,6 @@ struct RuntimeV1 {
     proofs::QuadCircuit<Field> credential_quad(proofs::p256_base);
     credential_circuit = BuildHolderCredentialCircuitV1(
         &credential_quad, &credential_layout);
-    proofs::QuadCircuit<Field> registry_credential_quad(proofs::p256_base);
-    registry_credential_circuit = BuildHolderRegistryCredentialCircuitV1(
-        &registry_credential_quad, &registry_credential_layout);
     proofs::QuadCircuit<Field> kb_quad(proofs::p256_base);
     kb_circuit = BuildHolderKbCircuitV1(&kb_quad, &kb_layout);
   }
@@ -96,15 +90,7 @@ bool valid_policy(const HolderBoundVerifierPolicyV1& policy) {
                      identity_equal(policy.kb_identity,
                                     holder_bound_kb_circuit_identity_v1()) &&
                      request_issuer_key(policy.request).has_value();
-  const auto registry =
-      decode_registry_trust_context_v1(policy.request.trust_public);
-  const bool hidden =
-      identity_equal(policy.credential_identity,
-                     holder_registry_credential_circuit_identity_v1()) &&
-      identity_equal(policy.kb_identity,
-                     holder_registry_kb_circuit_identity_v1()) &&
-      registry && registry.value->depth == kIssuerRegistryDepthV1;
-  return (exact || hidden) &&
+  return exact &&
          identity_equal(policy.request.identity,
                         policy.credential_identity) &&
          !policy.request.audience.empty() && !policy.request.nonce.empty() &&
@@ -248,23 +234,6 @@ CircuitIdentity holder_bound_kb_circuit_identity_v1() {
   return identity;
 }
 
-CircuitIdentity holder_registry_credential_circuit_identity_v1() {
-  CircuitIdentity identity{Binding::holder_bound, Trust::registry, 514, {},
-                           "p256-base", kRate, kQueries};
-  const auto& circuit = *runtime_v1().registry_credential_circuit;
-  std::copy_n(circuit.id, identity.circuit_digest.size(),
-              identity.circuit_digest.begin());
-  return identity;
-}
-
-CircuitIdentity holder_registry_kb_circuit_identity_v1() {
-  CircuitIdentity identity{Binding::holder_bound, Trust::registry, 216, {},
-                           "p256-base", kRate, kQueries};
-  const auto& circuit = *runtime_v1().kb_circuit;
-  std::copy_n(circuit.id, identity.circuit_digest.size(),
-              identity.circuit_digest.begin());
-  return identity;
-}
 
 Bytes holder_bound_policy_v1() {
   static constexpr char kPolicy[] = "age_over:eq:true";
@@ -280,13 +249,6 @@ HolderBoundVerifierPolicyV1 holder_bound_verifier_policy_v1(Request request) {
   return HolderBoundVerifierPolicyV1{std::move(request), credential, kb};
 }
 
-HolderBoundVerifierPolicyV1 holder_registry_verifier_policy_v1(
-    Request request) {
-  const auto credential = holder_registry_credential_circuit_identity_v1();
-  const auto kb = holder_registry_kb_circuit_identity_v1();
-  request.identity = credential;
-  return HolderBoundVerifierPolicyV1{std::move(request), credential, kb};
-}
 
 HolderBoundCircuitMetricsV1 holder_bound_circuit_metrics_v1() {
   const auto& runtime = runtime_v1();
@@ -299,25 +261,12 @@ HolderBoundCircuitMetricsV1 holder_bound_circuit_metrics_v1() {
       runtime.kb_circuit->nterms()};
 }
 
-HolderBoundCircuitMetricsV1 holder_registry_circuit_metrics_v1() {
-  const auto& runtime = runtime_v1();
-  return HolderBoundCircuitMetricsV1{
-      runtime.registry_credential_circuit->npub_in,
-      runtime.registry_credential_circuit->ninputs -
-          runtime.registry_credential_circuit->npub_in,
-      runtime.registry_credential_circuit->nterms(),
-      runtime.kb_circuit->npub_in,
-      runtime.kb_circuit->ninputs - runtime.kb_circuit->npub_in,
-      runtime.kb_circuit->nterms()};
-}
 
 struct HolderBoundCircuitProverV1::Impl {
   HolderBoundVerifierPolicyV1 policy;
   HolderCredentialWitnessV1 credential_witness;
-  std::optional<IssuerRegistryPathV1> registry_authorization;
   HolderKbWitnessV1 kb_witness;
   RuntimeV1& runtime;
-  bool registry_mode{};
   proofs::Circuit<Field>* credential_circuit{};
   HolderDenseLayoutV1* credential_layout{};
   proofs::Dense<Field> credential_dense;
@@ -339,37 +288,21 @@ struct HolderBoundCircuitProverV1::Impl {
 
   Impl(const HolderBoundVerifierPolicyV1& policy_in,
        const HolderCredentialWitnessV1& credential_in,
-       std::optional<IssuerRegistryPathV1> registry_authorization_in,
        const HolderKbWitnessV1& kb_in)
       : policy(policy_in),
         credential_witness(credential_in),
-        registry_authorization(std::move(registry_authorization_in)),
         kb_witness(kb_in),
         runtime(runtime_v1()),
-        registry_mode(policy.credential_identity.trust == Trust::registry),
-        credential_circuit(registry_mode
-                               ? runtime.registry_credential_circuit.get()
-                               : runtime.credential_circuit.get()),
-        credential_layout(registry_mode
-                              ? &runtime.registry_credential_layout
-                              : &runtime.credential_layout),
+        credential_circuit(runtime.credential_circuit.get()),
+        credential_layout(&runtime.credential_layout),
         credential_dense(1, credential_circuit->ninputs),
         kb_dense(1, runtime.kb_circuit->ninputs) {
     try {
       if (!valid_policy(policy)) return;
       const auto issuer = request_issuer_key(policy.request);
-      const auto registry =
-          decode_registry_trust_context_v1(policy.request.trust_public);
       const auto sd_hash = base64url_decode(kb_witness.claims.sd_hash, 64);
-      if ((!registry_mode &&
-           (!issuer || issuer->x != credential_witness.credential.issuer_key.x ||
-            issuer->y != credential_witness.credential.issuer_key.y)) ||
-          (registry_mode &&
-           (!registry || !registry_authorization ||
-            registry_authorization->record.issuer_key.x !=
-                credential_witness.credential.issuer_key.x ||
-            registry_authorization->record.issuer_key.y !=
-                credential_witness.credential.issuer_key.y)) ||
+      if ((!issuer || issuer->x != credential_witness.credential.issuer_key.x ||
+            issuer->y != credential_witness.credential.issuer_key.y) ||
           !credential_witness.credential.payload.holder_key ||
           credential_witness.credential.payload.holder_key->x !=
               kb_witness.holder_key.x ||
@@ -387,18 +320,9 @@ struct HolderBoundCircuitProverV1::Impl {
       kb_public.nonce = policy.request.nonce;
       kb_public.time_min = policy.request.time_min;
       kb_public.time_max = policy.request.time_max;
-      const bool credential_filled = registry_mode
-          ? FillHolderRegistryCredentialDenseWitnessV1(
-                credential_dense, *credential_layout,
-                runtime.credential_layout,
-                HolderRegistryCredentialPublicInputsV1{
-                    credential_public, *registry.value},
-                HolderRegistryCredentialWitnessV1{
-                    credential_witness, *registry_authorization},
-                bridge.writer())
-          : FillHolderCredentialDenseWitnessV1(
-                credential_dense, *credential_layout, credential_public,
-                credential_witness, bridge.writer());
+      const bool credential_filled = FillHolderCredentialDenseWitnessV1(
+          credential_dense, *credential_layout, credential_public,
+          credential_witness, bridge.writer());
       if (!credential_filled ||
           !FillHolderKbDenseWitnessV1(kb_dense, runtime.kb_layout, kb_public,
                                       kb_witness, bridge.writer()) ||
@@ -429,14 +353,7 @@ HolderBoundCircuitProverV1::HolderBoundCircuitProverV1(
     const HolderBoundVerifierPolicyV1& policy,
     const HolderCredentialWitnessV1& credential,
     const HolderKbWitnessV1& kb)
-    : impl_(std::make_unique<Impl>(policy, credential, std::nullopt, kb)) {}
-
-HolderBoundCircuitProverV1::HolderBoundCircuitProverV1(
-    const HolderBoundVerifierPolicyV1& policy,
-    const HolderRegistryCredentialWitnessV1& credential,
-    const HolderKbWitnessV1& kb)
-    : impl_(std::make_unique<Impl>(policy, credential.credential,
-                                   credential.authorization, kb)) {}
+    : impl_(std::make_unique<Impl>(policy, credential, kb)) {}
 
 HolderBoundCircuitProverV1::~HolderBoundCircuitProverV1() = default;
 HolderBoundCircuitProverV1::HolderBoundCircuitProverV1(
@@ -496,23 +413,10 @@ Result<Bytes> HolderBoundCircuitProverV1::bridge_public(
   impl_->credential_public.bridge_challenge = *challenge;
   impl_->kb_public.bridge_tags = tags;
   impl_->kb_public.bridge_challenge = *challenge;
-  const auto registry = decode_registry_trust_context_v1(
-      impl_->policy.request.trust_public);
-  const bool credential_filled = impl_->registry_mode
-      ? registry && impl_->registry_authorization &&
-            FillHolderRegistryCredentialDenseWitnessV1(
-                impl_->credential_dense, *impl_->credential_layout,
-                impl_->runtime.credential_layout,
-                HolderRegistryCredentialPublicInputsV1{
-                    impl_->credential_public, *registry.value},
-                HolderRegistryCredentialWitnessV1{
-                    impl_->credential_witness,
-                    *impl_->registry_authorization},
-                impl_->bridge.writer())
-      : FillHolderCredentialDenseWitnessV1(
-            impl_->credential_dense, *impl_->credential_layout,
-            impl_->credential_public, impl_->credential_witness,
-            impl_->bridge.writer());
+  const bool credential_filled = FillHolderCredentialDenseWitnessV1(
+      impl_->credential_dense, *impl_->credential_layout,
+      impl_->credential_public, impl_->credential_witness,
+      impl_->bridge.writer());
   if (!credential_filled ||
       !FillHolderKbDenseWitnessV1(
           impl_->kb_dense, impl_->runtime.kb_layout, impl_->kb_public,
@@ -566,13 +470,10 @@ bool HolderBoundCircuitVerifierV1::verify(
     const Bytes& kb_commitment, const Bytes& bridge_public,
     const Bytes& proof_bytes) {
   try {
-    const bool registry_mode = request.identity.trust == Trust::registry;
     const HolderBoundVerifierPolicyV1 policy{
         request,
-        registry_mode ? holder_registry_credential_circuit_identity_v1()
-                      : holder_bound_credential_circuit_identity_v1(),
-        registry_mode ? holder_registry_kb_circuit_identity_v1()
-                      : holder_bound_kb_circuit_identity_v1()};
+        holder_bound_credential_circuit_identity_v1(),
+        holder_bound_kb_circuit_identity_v1()};
     if (component != HolderComponent::credential &&
         component != HolderComponent::kb)
       return false;
@@ -585,9 +486,7 @@ bool HolderBoundCircuitVerifierV1::verify(
         kb_commitment.size() != proofs::Digest::kLength)
       return false;
     auto& runtime = runtime_v1();
-    auto* credential_circuit = registry_mode
-                                   ? runtime.registry_credential_circuit.get()
-                                   : runtime.credential_circuit.get();
+    auto* credential_circuit = runtime.credential_circuit.get();
     const auto& circuit = component == HolderComponent::credential
                               ? *credential_circuit
                               : *runtime.kb_circuit;
@@ -633,13 +532,6 @@ bool HolderBoundCircuitVerifierV1::verify(
     if (component == HolderComponent::credential) {
       HolderCredentialPublicInputsV1 inputs{tags, challenge, true};
       proofs::Dense<Field> dense(1, credential_circuit->npub_in);
-      if (registry_mode) {
-        const auto trust =
-            decode_registry_trust_context_v1(request.trust_public);
-        return trust && FillHolderRegistryCredentialPublicInputsV1(
-                            dense, {inputs, *trust.value}) &&
-               credential_verifier.verify(proof, dense, transcript);
-      }
       const auto issuer_key = request_issuer_key(request);
       return issuer_key &&
              FillHolderCredentialPublicInputsV1(dense, inputs, *issuer_key) &&
@@ -676,36 +568,6 @@ Result<bool> verify_holder_bound_v1(
       expected.credential_identity.trust != Trust::exact_key)
     return Result<bool>::fail(ErrorCode::unsupported,
                               "unsupported holder-bound V1 policy");
-  HolderBoundCircuitVerifierV1 verifier;
-  return verify_holder_bound_envelope_v1(envelope, expected, now, verifier,
-                                         replay_store, limits);
-}
-
-Result<HolderBoundEnvelope> prove_holder_registry_bound_v1(
-    const HolderBoundVerifierPolicyV1& policy,
-    const HolderRegistryCredentialWitnessV1& credential,
-    const HolderKbWitnessV1& kb, const Limits& limits) {
-  if (!valid_policy(policy) ||
-      policy.credential_identity.trust != Trust::registry)
-    return Result<HolderBoundEnvelope>::fail(
-        ErrorCode::unsupported, "unsupported holder registry V1 policy");
-  HolderBoundCircuitProverV1 prover(policy, credential, kb);
-  return prove_holder_bound_envelope_v1(policy, prover, limits);
-}
-
-Result<bool> verify_holder_registry_bound_v1(
-    const HolderBoundEnvelope& envelope,
-    const HolderBoundVerifierPolicyV1& expected, std::uint64_t now,
-    HolderBoundReplayStoreV1& replay_store, const Limits& limits) {
-  const auto trust =
-      decode_registry_trust_context_v1(expected.request.trust_public);
-  if (!valid_policy(expected) ||
-      expected.credential_identity.trust != Trust::registry || !trust)
-    return Result<bool>::fail(ErrorCode::unsupported,
-                              "unsupported holder registry V1 policy");
-  if (now < trust.value->valid_from || now > trust.value->valid_until)
-    return Result<bool>::fail(ErrorCode::malformed,
-                              "holder registry root is outside its window");
   HolderBoundCircuitVerifierV1 verifier;
   return verify_holder_bound_envelope_v1(envelope, expected, now, verifier,
                                          replay_store, limits);
