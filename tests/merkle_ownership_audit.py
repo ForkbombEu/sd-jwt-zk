@@ -134,6 +134,7 @@ def audit_sdjwt_sources() -> None:
     require("google-longfellow-zk" not in all_text and "/lib/merkle/" not in all_text,
             "SD-JWT contains a Google source-tree dependency")
     vector_files = [path for path in SDJWT.rglob("*") if path.is_file() and
+                    ".deps" not in path.relative_to(SDJWT).parts and
                     re.search(r"merkle.*vector|vector.*merkle", path.name, re.I)]
     require(not vector_files, "SD-JWT maintains a divergent Merkle vector corpus")
 
@@ -146,7 +147,7 @@ def audit_repository_wide_status_ownership() -> None:
     old, forbidden pattern: status code that both constructs a Merkle path and
     builds its per-level hash/witness advice itself.
     """
-    ignored = {"build", ".git", ".longfellow-install", "__pycache__"}
+    ignored = {"build", ".deps", ".git", ".longfellow-install", "__pycache__"}
     candidates = [path for path in SDJWT.rglob("*") if path.is_file() and
                   not any(part in ignored or part.startswith("build")
                           for part in path.relative_to(SDJWT).parts)]

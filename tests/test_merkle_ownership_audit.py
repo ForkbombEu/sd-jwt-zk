@@ -112,6 +112,20 @@ class MerkleOwnershipAuditTest(unittest.TestCase):
 
             AUDIT.audit_upstream_ownership(longfellow, google)
 
+    def test_dependency_checkout_is_not_treated_as_sdjwt_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            (project / "src").mkdir()
+            (project / "include").mkdir()
+            dependency_vector = (
+                project / ".deps" / "longfellow-zk" / "test" /
+                "merkle_membership_vectors.json")
+            dependency_vector.parent.mkdir(parents=True)
+            dependency_vector.write_text("{}\n", encoding="utf-8")
+
+            with mock.patch.object(AUDIT, "SDJWT", project):
+                AUDIT.audit_sdjwt_sources()
+
 
 if __name__ == "__main__":
     unittest.main()

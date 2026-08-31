@@ -53,7 +53,7 @@ This is free and open source software provided without warranty under the terms 
             ".h", ".hpp", ".cc", ".cpp", ".py", ".sh", ".js", ".mjs",
             ".ts", ".mts", ".cmake",
         }
-        excluded_parts = {".git", "node_modules", "vendor"}
+        excluded_parts = {".deps", ".git", "node_modules", "vendor"}
         sources = []
         for path in ROOT.rglob("*"):
             relative = path.relative_to(ROOT)
