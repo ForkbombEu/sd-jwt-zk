@@ -68,7 +68,7 @@ This is free and open source software provided without warranty under the terms 
             if (path.suffix in source_suffixes or
                     path.name in {"CMakeLists.txt", "SDJWTZKConfig.cmake.in"}):
                 sources.append(path)
-        self.assertEqual(len(sources), 111)
+        self.assertEqual(len(sources), 112)
         for source in sources:
             opening = "\n".join(source.read_text().splitlines()[:4])
             self.assertIn(copyright_line, opening, source)
