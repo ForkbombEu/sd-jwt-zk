@@ -1,8 +1,39 @@
-# Normative specification and vectors
+---
+title: Specification and vectors
+description: Locate the normative V1 protocol, status profile, reference lock, compatibility record, and bounded fixtures.
+---
 
-The source archive carries the normative protocol in `spec/sd-jwt-zk-v1.md`,
-the local status profile in `spec/local-status-v1.md`, protocol sequences in
-`spec/protocol-sequences.md`, the locked reference index in
-`spec/references.md`, and bounded vectors in `fixtures/compact-vectors.json`.
-Product support is narrower than historical and experimental material
-retained in `spec/`.
+# Specification and vectors
+
+The source archive carries the normative protocol and its release evidence.
+Read product support from the V1 API and current support records; some files
+under `spec/` retain historical or experimental families that are not shipped.
+
+## Normative and operational sources
+
+| Artifact | Role |
+| --- | --- |
+| `spec/sd-jwt-zk-v1.md` | Normative bounded protocol |
+| `spec/local-status-v1.md` | Local snapshot authority, rotation, rollback, and availability policy |
+| `spec/protocol-sequences.md` | Logical deployment-message sequences |
+| `spec/compatibility.md` | Feature decisions and external/unsupported classifications |
+| `spec/references.md` | Locked standards reference index |
+| `spec/reference-lock.json` | Machine-checked reference versions and anchors |
+
+## Fixtures and assurance records
+
+`fixtures/compact-vectors.json` indexes the bounded input vectors shipped with
+every source archive. `spec/reduced-binding-matrix.json` traces each supported
+input from parsing through its constraint, presentation binding, verifier
+policy, and negative test. `spec/reduced-release-resources.json` records the
+structural resource boundary for the release lane.
+
+## Reading rule
+
+The presence of registry, aggregate, recursive, 32-slot, or broader
+compatibility material does not make it part of the V1 product. The supported
+surface is the fixed two-slot scalar exact-key bearer and holder-bound entry
+points, optionally paired with local `VALID` status.
+
+Start with [what V1 proves](./what-it-proves.md), then use the normative sources
+for protocol-level review.

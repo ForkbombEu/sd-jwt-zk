@@ -3,6 +3,16 @@ name: benchmarked-release
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'PRODUCT.md'
+      - 'DESIGN.md'
+      - '.impeccable/**'
+      - '.gitignore'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 permissions:

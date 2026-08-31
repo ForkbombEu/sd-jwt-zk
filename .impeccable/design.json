@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-31T22:44:45Z",
+  "title": "Design System: SD-JWT ZK",
+  "extensions": {
+    "colorMeta": {
+      "structural-blue": {
+        "role": "primary",
+        "displayName": "Structural Blue",
+        "canonical": "#0f237c",
+        "tonalRamp": ["oklch(15% 0.08 265)", "oklch(25% 0.08 265)", "oklch(35% 0.08 265)", "oklch(45% 0.08 265)", "oklch(58% 0.08 265)", "oklch(70% 0.08 265)", "oklch(84% 0.08 265)", "oklch(95% 0.08 265)"]
+      },
+      "deep-navy": {
+        "role": "primary",
+        "displayName": "Deep Navy",
+        "canonical": "#050d30",
+        "tonalRamp": ["oklch(15% 0.055 265)", "oklch(25% 0.055 265)", "oklch(35% 0.055 265)", "oklch(45% 0.055 265)", "oklch(58% 0.055 265)", "oklch(70% 0.055 265)", "oklch(84% 0.055 265)", "oklch(95% 0.055 265)"]
+      },
+      "signal-mint": {
+        "role": "secondary",
+        "displayName": "Signal Mint",
+        "canonical": "#2dd8a3",
+        "tonalRamp": ["oklch(15% 0.10 165)", "oklch(25% 0.10 165)", "oklch(35% 0.10 165)", "oklch(45% 0.10 165)", "oklch(58% 0.10 165)", "oklch(70% 0.10 165)", "oklch(84% 0.10 165)", "oklch(95% 0.10 165)"]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(25% 0 0)", "oklch(35% 0 0)", "oklch(45% 0 0)", "oklch(58% 0 0)", "oklch(70% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "cloud": {
+        "role": "neutral",
+        "displayName": "Cloud",
+        "canonical": "#f7f7f7",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(25% 0 0)", "oklch(35% 0 0)", "oklch(45% 0 0)", "oklch(58% 0 0)", "oklch(70% 0 0)", "oklch(84% 0 0)", "oklch(95% 0 0)"]
+      },
+      "mist": {
+        "role": "neutral",
+        "displayName": "Mist",
+        "canonical": "#eef1f5",
+        "tonalRamp": ["oklch(15% 0.01 255)", "oklch(25% 0.01 255)", "oklch(35% 0.01 255)", "oklch(45% 0.01 255)", "oklch(58% 0.01 255)", "oklch(70% 0.01 255)", "oklch(84% 0.01 255)", "oklch(95% 0.01 255)"]
+      },
+      "muted-ink": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#3f4b70",
+        "tonalRamp": ["oklch(15% 0.04 265)", "oklch(25% 0.04 265)", "oklch(35% 0.04 265)", "oklch(45% 0.04 265)", "oklch(58% 0.04 265)", "oklch(70% 0.04 265)", "oklch(84% 0.04 265)", "oklch(95% 0.04 265)"]
+      },
+      "structural-rule": {
+        "role": "neutral",
+        "displayName": "Structural Rule",
+        "canonical": "rgba(15, 35, 124, 0.22)",
+        "tonalRamp": ["oklch(15% 0.08 265 / 0.22)", "oklch(25% 0.08 265 / 0.22)", "oklch(35% 0.08 265 / 0.22)", "oklch(45% 0.08 265 / 0.22)", "oklch(58% 0.08 265 / 0.22)", "oklch(70% 0.08 265 / 0.22)", "oklch(84% 0.08 265 / 0.22)", "oklch(95% 0.08 265 / 0.22)"]
+      },
+      "signal-rule-dark": {
+        "role": "secondary",
+        "displayName": "Signal Rule on Dark",
+        "canonical": "rgba(45, 216, 163, 0.6)",
+        "tonalRamp": ["oklch(15% 0.10 165 / 0.6)", "oklch(25% 0.10 165 / 0.6)", "oklch(35% 0.10 165 / 0.6)", "oklch(45% 0.10 165 / 0.6)", "oklch(58% 0.10 165 / 0.6)", "oklch(70% 0.10 165 / 0.6)", "oklch(84% 0.10 165 / 0.6)", "oklch(95% 0.10 165 / 0.6)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero statements and the largest section claims." },
+      "title": { "displayName": "Title", "purpose": "Document and section hierarchy." },
+      "body": { "displayName": "Body", "purpose": "Protocol explanation and sustained reading." },
+      "label": { "displayName": "Label", "purpose": "Actions, navigation, stage ownership, and metadata." },
+      "mono": { "displayName": "Mono", "purpose": "Source paths, code, and the restrained Forkbomb expression." }
+    },
+    "shadows": [
+      { "name": "lateral-card", "value": "5rem 0 4.375rem -1.25rem rgba(0, 0, 0, 0.14)", "purpose": "Structural inline-end depth on major comparison and path containers." },
+      { "name": "proof-signal-glow", "value": "0 0 1.5rem rgba(45, 216, 163, 0.8)", "purpose": "Glow on the moving signal within the proof rail only." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Directional motion and the proof signal." },
+      { "name": "duration-fast", "value": "160ms", "purpose": "Button colors and ArrowMark translation." },
+      { "name": "duration-slow", "value": "900ms", "purpose": "Reserved Forkbomb slow transition duration." },
+      { "name": "proof-signal-cycle", "value": "4.8s", "purpose": "Moves one signal through Challenge, Prove, and Verify; disabled under reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "compact", "value": "30rem" },
+      { "name": "single-column", "value": "47.99rem" },
+      { "name": "compressed-desktop", "value": "60rem" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Solid Button",
+      "kind": "button",
+      "refersTo": "button-solid",
+      "description": "Primary action on light or dark structural fields.",
+      "html": "<a class=\"ds-btn-solid\" href=\"#\">Get started <svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 8h10M8 4l4 4-4 4\" /></svg></a>",
+      "css": ".ds-btn-solid { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: .6rem; padding: .75rem 2rem; color: var(--fb-color-navy, #050d30); background: var(--fb-color-mint, #2dd8a3); border: 1px solid var(--fb-color-mint, #2dd8a3); border-radius: 0; font: 600 .875rem/1.2 var(--fb-font-body, 'Public Sans', Arial, sans-serif); text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; } .ds-btn-solid svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: square; stroke-linejoin: miter; transition: transform 160ms cubic-bezier(.16,1,.3,1); } .ds-btn-solid:hover { color: var(--fb-color-white, #fff); background: var(--fb-color-blue, #0f237c); border-color: var(--fb-color-blue, #0f237c); } .ds-btn-solid:hover svg { transform: translateX(.18rem); } .ds-btn-solid:focus-visible { outline: 2px solid var(--fb-color-mint, #2dd8a3); outline-offset: 4px; } .ds-btn-solid:active { color: var(--fb-color-white, #fff); background: var(--fb-color-navy, #050d30); border-color: var(--fb-color-navy, #050d30); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary action that inherits the foreground of its field.",
+      "html": "<a class=\"ds-btn-outline\" href=\"#\">Inspect the boundary <svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 8h10M8 4l4 4-4 4\" /></svg></a>",
+      "css": ".ds-btn-outline { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: .6rem; padding: .75rem 2rem; color: var(--fb-color-blue, #0f237c); background: transparent; border: 1px solid currentColor; border-radius: 0; font: 600 .875rem/1.2 var(--fb-font-body, 'Public Sans', Arial, sans-serif); text-decoration: none; transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease; } .ds-btn-outline svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: square; stroke-linejoin: miter; transition: transform 160ms cubic-bezier(.16,1,.3,1); } .ds-btn-outline:hover { color: var(--fb-color-navy, #050d30); background: var(--fb-color-mint, #2dd8a3); border-color: var(--fb-color-mint, #2dd8a3); } .ds-btn-outline:hover svg { transform: translateX(.18rem); } .ds-btn-outline:focus-visible { outline: 2px solid var(--fb-color-mint, #2dd8a3); outline-offset: 4px; } .ds-btn-outline:active { color: var(--fb-color-white, #fff); background: var(--fb-color-blue, #0f237c); border-color: var(--fb-color-blue, #0f237c); }"
+    },
+    {
+      "name": "Forkbomb Brand",
+      "kind": "custom",
+      "description": "Stacked project name and restrained Forkbomb expression for navigation or footer identity.",
+      "html": "<a class=\"ds-brand\" href=\"#\"><span class=\"ds-brand-name\">SD-JWT ZK</span><span class=\"ds-brand-expression\" aria-hidden=\"true\">:(){ :|:&amp; };:</span></a>",
+      "css": ".ds-brand { display: inline-flex; flex-direction: column; align-items: flex-start; color: var(--fb-color-blue, #0f237c); font-family: var(--fb-font-display, 'Barlow Semi Condensed', 'Arial Narrow', sans-serif); line-height: .8; text-decoration: none; text-transform: uppercase; } .ds-brand-name { font-size: clamp(1.1rem,.95rem + .55vw,1.55rem); font-weight: 700; letter-spacing: .06em; } .ds-brand-expression { margin-top: .35rem; color: var(--fb-color-mint, #2dd8a3); font-family: var(--fb-font-mono, ui-monospace, SFMono-Regular, Consolas, monospace); font-size: .55em; font-weight: 600; letter-spacing: .18em; } .ds-brand:hover .ds-brand-name { color: var(--fb-color-navy, #050d30); } .ds-brand:focus-visible { outline: 2px solid var(--fb-color-mint, #2dd8a3); outline-offset: 4px; } .ds-brand:active { opacity: .8; }"
+    },
+    {
+      "name": "Protocol Rail",
+      "kind": "custom",
+      "description": "Signature ordered journey for Challenge, Prove, and Verify.",
+      "html": "<div class=\"ds-rail\" aria-label=\"Protocol journey: Challenge, Prove, Verify\"><div class=\"ds-rail-track\" aria-hidden=\"true\"><span class=\"ds-rail-signal\"></span></div><ol><li><span class=\"ds-rail-node\">1</span><div><h3>Challenge</h3><p><strong>Public policy.</strong> The verifier fixes the request.</p></div></li><li><span class=\"ds-rail-node\">2</span><div><h3>Prove</h3><p><strong>Private witness.</strong> The wallet proves the bounded relation.</p></div></li><li><span class=\"ds-rail-node\">3</span><div><h3>Verify</h3><p><strong>Closed result.</strong> The verifier applies policy and replay handling.</p></div></li></ol></div>",
+      "css": ".ds-rail { position: relative; padding: 1.5rem; color: var(--fb-color-white, #fff); background: var(--fb-color-navy, #050d30); } .ds-rail ol { display: grid; gap: 1.5rem; margin: 0; padding: 0; list-style: none; } .ds-rail li { position: relative; display: grid; grid-template-columns: 2.75rem minmax(0,1fr); gap: 1.5rem; align-items: start; } .ds-rail-node { position: relative; z-index: 2; display: grid; width: 2.75rem; height: 2.75rem; place-items: center; color: var(--fb-color-navy, #050d30); background: var(--fb-color-mint, #2dd8a3); border: 1px solid var(--fb-color-mint, #2dd8a3); font: 700 1rem var(--fb-font-display, 'Barlow Semi Condensed', 'Arial Narrow', sans-serif); } .ds-rail-track { position: absolute; top: 4.1rem; bottom: 4.1rem; left: 2.85rem; width: 1px; background: rgba(255,255,255,.28); } .ds-rail-signal { position: absolute; left: -4px; top: 0; width: 9px; height: 9px; background: var(--fb-color-mint, #2dd8a3); box-shadow: 0 0 1.5rem rgba(45,216,163,.8); animation: ds-proof-signal 4.8s cubic-bezier(.16,1,.3,1) infinite; } .ds-rail h3 { margin: 0 0 .35rem; color: var(--fb-color-white, #fff); font: 600 1.8rem/1.08 var(--fb-font-display, 'Barlow Semi Condensed', 'Arial Narrow', sans-serif); } .ds-rail p { margin: 0; color: rgba(255,255,255,.76); font: 400 .95rem/1.55 var(--fb-font-body, 'Public Sans', Arial, sans-serif); } .ds-rail strong { color: var(--fb-color-mint, #2dd8a3); } .ds-rail:focus-within { outline: 2px solid var(--fb-color-mint, #2dd8a3); outline-offset: 4px; } @keyframes ds-proof-signal { 0%,10% { top: 0; } 42%,54% { top: calc(50% - 4px); } 88%,100% { top: calc(100% - 9px); } } @media (prefers-reduced-motion: reduce) { .ds-rail-signal { top: calc(100% - 9px); animation: none; } }"
+    },
+    {
+      "name": "Path Card",
+      "kind": "card",
+      "description": "A major square container for one implementation or assurance path.",
+      "html": "<article class=\"ds-path-card\"><h3>Build against the supported boundary.</h3><p><strong class=\"ds-path-label\">Implementation path.</strong> Install the package, construct a typed request, and keep verification policy at the application boundary.</p><a href=\"#\">Getting started <svg viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"M2 8h10M8 4l4 4-4 4\" /></svg></a></article>",
+      "css": ".ds-path-card { padding: clamp(2rem,5vw,4rem); color: var(--fb-color-navy, #050d30); background: var(--fb-color-white, #fff); border-left: 1px solid var(--fb-color-blue, #0f237c); border-radius: 0; box-shadow: 5rem 0 4.375rem -1.25rem rgba(0,0,0,.14); font-family: var(--fb-font-body, 'Public Sans', Arial, sans-serif); } .ds-path-card h3 { max-width: 15ch; margin: 0 0 1rem; color: var(--fb-color-blue, #0f237c); font: 600 clamp(2rem,1.5rem + 1.3vw,3rem)/1 var(--fb-font-display, 'Barlow Semi Condensed', 'Arial Narrow', sans-serif); } .ds-path-card p { color: var(--fb-color-text-muted, #3f4b70); line-height: 1.55; } .ds-path-label { color: var(--fb-color-blue, #0f237c) !important; font-weight: 600; } .ds-path-card a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0; color: var(--fb-color-blue, #0f237c); border-top: 1px solid rgba(15,35,124,.22); border-bottom: 1px solid rgba(15,35,124,.22); font-weight: 600; text-decoration: none; } .ds-path-card svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: square; stroke-linejoin: miter; transition: transform 160ms cubic-bezier(.16,1,.3,1); } .ds-path-card a:hover { color: var(--fb-color-navy, #050d30); } .ds-path-card a:hover svg { transform: translateX(.18rem); } .ds-path-card a:focus-visible { outline: 2px solid var(--fb-color-mint, #2dd8a3); outline-offset: 4px; } .ds-path-card a:active { color: var(--fb-color-mint, #2dd8a3); }"
+    },
+    {
+      "name": "Evidence Row",
+      "kind": "custom",
+      "description": "Ruled claim-to-source row for repository-backed assurance evidence.",
+      "html": "<dl class=\"ds-evidence\"><div><dt>Protocol</dt><dd><code>spec/sd-jwt-zk-v1.md</code></dd></div><div><dt>Vectors</dt><dd><code>fixtures/compact-vectors.json</code></dd></div></dl>",
+      "css": ".ds-evidence { margin: 0; color: var(--fb-color-white, #fff); background: var(--fb-color-blue, #0f237c); border-top: 1px solid rgba(255,255,255,.18); font-family: var(--fb-font-body, 'Public Sans', Arial, sans-serif); } .ds-evidence > div { display: grid; grid-template-columns: minmax(8rem,.7fr) minmax(0,1.3fr); gap: 1.5rem; padding: 1.5rem; border-bottom: 1px solid rgba(255,255,255,.18); } .ds-evidence dt { color: var(--fb-color-mint, #2dd8a3); font: 600 1rem var(--fb-font-display, 'Barlow Semi Condensed', 'Arial Narrow', sans-serif); } .ds-evidence dd { min-width: 0; margin: 0; overflow-wrap: anywhere; } .ds-evidence code { padding: .12em .35em; color: var(--fb-color-white, #fff); background: rgba(5,13,48,.35); font-family: var(--fb-font-mono, ui-monospace, SFMono-Regular, Consolas, monospace); } .ds-evidence:hover > div { border-bottom-color: rgba(45,216,163,.6); } .ds-evidence:focus-within { outline: 2px solid var(--fb-color-mint, #2dd8a3); outline-offset: 4px; } .ds-evidence:active { background: var(--fb-color-navy, #050d30); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Bounded Proof Rail",
+    "overview": "The SD-JWT ZK documentation inherits the Forkbomb Vite Theme exactly: structural blue and deep navy establish a technical field, mint marks meaningful signals, and white or cloud surfaces give dense protocol material room to read. The visual system is candid and architectural rather than ornamental. Every division should clarify a boundary, owner, state, or path through the documentation.\n\nThe homepage expresses that world as a three-stage Challenge → Prove → Verify journey, but the reusable system is broader: square geometry, one-pixel rules, condensed display type, plain reading type, and lateral depth. Forkbomb-expression watermarks may provide quiet identity on large dark fields; they stay subordinate to content and disappear in forced-colors mode.",
+    "keyCharacteristics": [
+      "Structural blue and deep navy fields with sparse mint signals.",
+      "Square silhouettes and one-pixel rules throughout controls and containers.",
+      "Barlow Semi Condensed for hierarchy; Public Sans for sustained reading.",
+      "Lateral shadows and tonal contrast instead of floating rounded cards.",
+      "Native VitePress navigation, search, reading, and accessibility behavior."
+    ],
+    "rules": [
+      { "name": "The Mint Means Something Rule", "body": "Use mint to identify progress, focus, active state, or a meaningful boundary; do not spread it as ambient decoration.", "section": "colors" },
+      { "name": "The Field Contrast Rule", "body": "Large sections alternate white, cloud, structural blue, and deep navy so information architecture remains visible before the copy is read.", "section": "colors" },
+      { "name": "The Two-Voice Rule", "body": "Barlow Semi Condensed speaks hierarchy; Public Sans explains. Do not introduce a third expressive typeface.", "section": "typography" },
+      { "name": "The Short Display Rule", "body": "Display text must remain compact enough to preserve the condensed face's authority and the site's strong field geometry.", "section": "typography" },
+      { "name": "The Protocol Before Cards Rule", "body": "Use ordered rails, ruled lists, and explicit field divisions when the content describes sequence or responsibility. Cards are reserved for genuinely parallel paths or bounded comparisons.", "section": "layout" },
+      { "name": "The Lateral Depth Rule", "body": "When depth is needed, cast it sideways from a square surface; do not substitute soft centered elevation.", "section": "elevation" },
+      { "name": "The Flat-at-Rest Rule", "body": "Navigation, buttons, document blocks, and ordinary containers remain flat at rest.", "section": "elevation" },
+      { "name": "The Square Means Exact Rule", "body": "Preserve zero-radius corners across new controls and containers; rounding would contradict the exact, bounded relation the interface communicates.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do use structural blue and deep navy as information-bearing fields, with mint reserved for signals and active boundaries.",
+      "Do preserve square geometry, one-pixel rules, lateral depth, and the established two-font hierarchy.",
+      "Do keep proof, application policy, and operational trust visibly separated in layout as well as copy.",
+      "Do preserve visible focus, reduced-motion behavior, forced-colors fallbacks, color-mode support, and native VitePress interaction.",
+      "Do use the authored ArrowMark SVG for directional actions."
+    ],
+    "donts": [
+      "Don't turn protocol sequence, evidence, or responsibility boundaries into a grid of interchangeable feature cards.",
+      "Don't use mint as a large decorative fill when it does not communicate a signal, state, or boundary.",
+      "Don't introduce rounded pills, soft centered shadows, gradient-filled controls, or generated-glyph arrows.",
+      "Don't let the Forkbomb expression watermark compete with headings or body copy.",
+      "Don't add raster imagery without recording its source and generation or licensing provenance; the current shipping system contains no raster assets."
+    ]
+  }
+}
