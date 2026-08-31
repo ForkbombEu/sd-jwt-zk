@@ -34,6 +34,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(self.run_cli("prove", "--credential", "secret").returncode, 2)
         self.assertEqual(self.run_cli("verify", "--registry", "root").returncode, 2)
         self.assertEqual(self.run_cli("status-snapshot", "build").returncode, 2)
+        for command in ("prove", "verify"):
+            rejected = self.run_cli(command, "--mode", "registry")
+            self.assertEqual(rejected.returncode, 2)
+            self.assertIn("unsupported mode", rejected.stderr)
 
     def test_inspect_refuses_symlink_and_missing_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -117,6 +121,34 @@ class CliTests(unittest.TestCase):
                 "--proof-file", str(proof), "--nonce-store", str(nonce_store),
                 "--now", "1777334400")
             self.assertEqual(verified.returncode, 0, verified.stderr)
+            self.assertTrue(nonce_store.is_dir())
+            self.assertEqual(len(list(nonce_store.iterdir())), 1)
+            replayed = self.run_cli(
+                "verify", "--mode", "holder", "--challenge", str(root / "challenge"),
+                "--proof-file", str(proof), "--nonce-store", str(nonce_store),
+                "--now", "1777334400")
+            self.assertEqual(replayed.returncode, 2)
+
+            second = root / "second"
+            second.mkdir()
+            generated = subprocess.run(
+                [HOLDER_FIXTURE_GEN, second, "challenge-0002"], text=True,
+                capture_output=True)
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            for name in ("issuer.hex", "presentation", "challenge"):
+                (second / name).chmod(0o600)
+            second_proof = second / "proof"
+            proved = self.run_cli(
+                "prove", "--mode", "holder", "--challenge", str(second / "challenge"),
+                "--presentation-file", str(second / "presentation"),
+                "--issuer-key-file", str(second / "issuer.hex"), "--out", str(second_proof))
+            self.assertEqual(proved.returncode, 0, proved.stderr)
+            verified = self.run_cli(
+                "verify", "--mode", "holder", "--challenge", str(second / "challenge"),
+                "--proof-file", str(second_proof), "--nonce-store", str(nonce_store),
+                "--now", "1777334400")
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+            self.assertEqual(len(list(nonce_store.iterdir())), 2)
 
 
 if __name__ == "__main__":

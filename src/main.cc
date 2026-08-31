@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cerrno>
 #include <cstdint>
 #include <fcntl.h>
 #include <iostream>
@@ -85,12 +86,22 @@ bool write_new_owner_only(std::string_view path, const Bytes& data) {
   std::size_t offset = 0;
   while (offset < data.size()) {
     const auto sent = write(fd, data.data() + offset, data.size() - offset);
-    if (sent <= 0) { close(fd); return false; }
+    if (sent < 0 && errno == EINTR) continue;
+    if (sent <= 0) {
+      close(fd);
+      unlink(std::string(path).c_str());
+      return false;
+    }
     offset += static_cast<std::size_t>(sent);
   }
   const bool synced = fsync(fd) == 0;
   const bool closed = close(fd) == 0;
-  return synced && closed && sync_parent(path);
+  const bool parent_synced = synced && closed && sync_parent(path);
+  if (!parent_synced) {
+    unlink(std::string(path).c_str());
+    sync_parent(path);
+  }
+  return parent_synced;
 }
 
 std::optional<std::string_view> option(int argc, char** argv, std::string_view key) {
@@ -148,17 +159,73 @@ std::optional<sd_jwt_zk::StatusMembershipWitnessV1> status_witness_file(
   return witness;
 }
 
+std::string nonce_entry_name(std::string_view audience, std::string_view nonce,
+                             std::uint64_t expires_at) {
+  std::string material{"sd-jwt-zk/cli-nonce-store/v1"};
+  auto append = [&material](std::string_view value) {
+    for (int shift = 56; shift >= 0; shift -= 8)
+      material.push_back(static_cast<char>(value.size() >> shift));
+    material.append(value);
+  };
+  append(audience);
+  append(nonce);
+  for (int shift = 56; shift >= 0; shift -= 8)
+    material.push_back(static_cast<char>(expires_at >> shift));
+  const auto digest = sd_jwt_zk::sha256_ascii(material);
+  static constexpr char digits[] = "0123456789abcdef";
+  std::string name;
+  name.reserve(digest.size() * 2);
+  for (const auto byte : digest) {
+    name.push_back(digits[byte >> 4]);
+    name.push_back(digits[byte & 0x0f]);
+  }
+  return name;
+}
+
+bool consume_nonce(std::string_view path, std::string_view audience,
+                   std::string_view nonce, std::uint64_t expires_at) {
+  if (path.empty() || path.size() > 4096) return false;
+  const std::string directory(path);
+  if (mkdir(directory.c_str(), 0700) != 0 && errno != EEXIST) return false;
+  const int directory_fd = open(directory.c_str(),
+      O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+  if (directory_fd < 0) return false;
+  struct stat st {};
+  if (fstat(directory_fd, &st) != 0 || !S_ISDIR(st.st_mode) ||
+      (st.st_mode & 077) != 0 || st.st_uid != geteuid()) {
+    close(directory_fd);
+    return false;
+  }
+  const auto name = nonce_entry_name(audience, nonce, expires_at);
+  const int fd = openat(directory_fd, name.c_str(),
+      O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+  if (fd < 0) {
+    close(directory_fd);
+    return false;
+  }
+  static constexpr char marker[] = "sd-jwt-zk nonce consumed\n";
+  std::size_t offset = 0;
+  bool ok = true;
+  while (offset < sizeof(marker) - 1) {
+    const auto sent = write(fd, marker + offset, sizeof(marker) - 1 - offset);
+    if (sent < 0 && errno == EINTR) continue;
+    if (sent <= 0) { ok = false; break; }
+    offset += static_cast<std::size_t>(sent);
+  }
+  ok = ok && fsync(fd) == 0;
+  ok = close(fd) == 0 && ok;
+  ok = ok && fsync(directory_fd) == 0;
+  if (!ok) unlinkat(directory_fd, name.c_str(), 0);
+  const bool directory_closed = close(directory_fd) == 0;
+  return ok && directory_closed;
+}
+
 class NonceFileReplay final : public sd_jwt_zk::FlatBearerReplayStoreV1 {
  public:
   explicit NonceFileReplay(std::string_view path) : path_(path) {}
-  bool consume(std::string_view, std::string_view, std::uint64_t) override {
-    const int fd = open(path_.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (fd < 0) return false;
-    static constexpr char marker[] = "sd-jwt-zk nonce consumed\n";
-    const bool ok = write(fd, marker, sizeof(marker) - 1) ==
-                        static_cast<ssize_t>(sizeof(marker) - 1) &&
-                    fsync(fd) == 0 && close(fd) == 0;
-    return ok && sync_parent(path_);
+  bool consume(std::string_view audience, std::string_view nonce,
+               std::uint64_t expires_at) override {
+    return consume_nonce(path_, audience, nonce, expires_at);
   }
  private:
   std::string path_;
@@ -167,14 +234,9 @@ class NonceFileReplay final : public sd_jwt_zk::FlatBearerReplayStoreV1 {
 class HolderNonceFileReplay final : public sd_jwt_zk::HolderBoundReplayStoreV1 {
  public:
   explicit HolderNonceFileReplay(std::string_view path) : path_(path) {}
-  bool consume(std::string_view, std::string_view, std::uint64_t) override {
-    const int fd = open(path_.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (fd < 0) return false;
-    static constexpr char marker[] = "sd-jwt-zk holder nonce consumed\n";
-    const bool ok = write(fd, marker, sizeof(marker) - 1) ==
-                        static_cast<ssize_t>(sizeof(marker) - 1) &&
-                    fsync(fd) == 0 && close(fd) == 0;
-    return ok && sync_parent(path_);
+  bool consume(std::string_view audience, std::string_view nonce,
+               std::uint64_t expires_at) override {
+    return consume_nonce(path_, audience, nonce, expires_at);
   }
  private:
   std::string path_;
@@ -373,10 +435,18 @@ int main(int argc, char** argv) {
   if (argc >= 2 && std::string_view(argv[1]) == "inspect") return inspect(argc - 1, argv + 1);
   if (argc >= 2 && std::string_view(argv[1]) == "prove") {
     const auto mode = option(argc - 1, argv + 1, "--mode");
+    if (mode && *mode != "bearer" && *mode != "holder") {
+      std::cerr << "prove: unsupported mode\n";
+      return 2;
+    }
     return mode && *mode == "holder" ? prove_holder(argc - 1, argv + 1) : prove(argc - 1, argv + 1);
   }
   if (argc >= 2 && std::string_view(argv[1]) == "verify") {
     const auto mode = option(argc - 1, argv + 1, "--mode");
+    if (mode && *mode != "bearer" && *mode != "holder") {
+      std::cerr << "verify: unsupported mode\n";
+      return 2;
+    }
     return mode && *mode == "holder" ? verify_holder(argc - 1, argv + 1) : verify(argc - 1, argv + 1);
   }
   if (argc >= 3 && std::string_view(argv[1]) == "status-snapshot" &&

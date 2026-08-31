@@ -32,7 +32,9 @@ void hex_key(const std::string& path, const sd_jwt_zk::P256Key& key) {
 }
 
 int main(int argc, char** argv) {
-  if (argc != 2) return 2;
+  if (argc < 2 || argc > 3) return 2;
+  const std::string nonce = argc == 3 ? argv[2] : "challenge-0001";
+  if (nonce.size() != 14) return 2;
   constexpr char object[] = "WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsInRydWUiXQ";
   constexpr char array[] = "WyJhcnJheTAwMSIsIml0ZW0iXQ";
   constexpr char issuer_header[] = "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ";
@@ -51,11 +53,11 @@ int main(int argc, char** argv) {
   const std::string compact=issuer_signing+"."+sd_jwt_zk::base64url_encode({raw.begin(),raw.end()});
   const std::string credential=compact+"~"+object+"~"+array+"~";
   const auto hash=sd_jwt_zk::sha256_ascii(credential);
-  const std::string kb_json="{\"aud\":\"https://verifier.example\",\"nonce\":\"challenge-0001\",\"iat\":1777334400,\"sd_hash\":\""+sd_jwt_zk::base64url_encode({hash.begin(),hash.end()})+"\"}";
+  const std::string kb_json="{\"aud\":\"https://verifier.example\",\"nonce\":\""+nonce+"\",\"iat\":1777334400,\"sd_hash\":\""+sd_jwt_zk::base64url_encode({hash.begin(),hash.end()})+"\"}";
   const std::string kb_signing=std::string(kb_header)+"."+sd_jwt_zk::base64url_encode({kb_json.begin(),kb_json.end()});
   if (!sd_jwt_zk::test::sign_nested_fixture_es256(kb_signing,raw,nullptr,holder_scalar)) return 2;
   const std::string presentation=credential+kb_signing+"."+sd_jwt_zk::base64url_encode({raw.begin(),raw.end()});
-  sd_jwt_zk::Request request{}; request.audience="https://verifier.example"; request.nonce="challenge-0001";
+  sd_jwt_zk::Request request{}; request.audience="https://verifier.example"; request.nonce=nonce;
   request.time_min=1777334300; request.time_max=1777334500; request.policy=sd_jwt_zk::holder_bound_policy_v1();
   request.policy_result=sd_jwt_zk::holder_bound_true_policy_result_v1();
   request.trust_public.insert(request.trust_public.end(),issuer.x.begin(),issuer.x.end());
