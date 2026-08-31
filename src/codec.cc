@@ -53,11 +53,17 @@ Result<void*> holder_shape(const HolderBoundEnvelope& value, const Limits& limit
 Result<Bytes> encode_holder_bound_envelope(const HolderBoundEnvelope& x,const Limits&l){
   if (!holder_shape(x,l)) return Result<Bytes>::fail(ErrorCode::malformed,"invalid holder proof envelope");
   if (x.request.status_public.empty() != x.status_proof.empty()) return Result<Bytes>::fail(ErrorCode::malformed,"status policy/proof mismatch");
+  if (x.request.status_public.empty() &&
+      std::any_of(x.status_bridge_commitment.begin(),
+                  x.status_bridge_commitment.end(),
+                  [](std::uint8_t byte) { return byte != 0; }))
+    return Result<Bytes>::fail(ErrorCode::noncanonical,
+                               "statusless holder bridge must be zero");
   auto request=encode_request(x.request,l), credential=encode_identity(x.credential_identity,l), kb=encode_identity(x.kb_identity,l);
   if(!request||!credential||!kb)return Result<Bytes>::fail(ErrorCode::malformed,"noncanonical holder proof envelope");
   Bytes o{version,1}; lp(o,*request.value); lp(o,*credential.value); lp(o,*kb.value);
   lp(o,x.credential_commitment); lp(o,x.kb_commitment); lp(o,x.bridge_public);
-  lp(o,x.credential_proof); lp(o,x.kb_proof); lp(o,x.status_proof);
+  lp(o,x.credential_proof); lp(o,x.kb_proof); lp(o,Bytes(x.status_bridge_commitment.begin(),x.status_bridge_commitment.end())); lp(o,x.status_proof);
   return limits(l,o.size())?Result<Bytes>::ok(std::move(o)):Result<Bytes>::fail(ErrorCode::limit,"holder proof envelope exceeds bound");
 }
 Result<HolderBoundEnvelope> decode_holder_bound_envelope(const Bytes&b,const Limits&l){
@@ -65,16 +71,23 @@ Result<HolderBoundEnvelope> decode_holder_bound_envelope(const Bytes&b,const Lim
   Reader r{b};auto version_byte=r.byte(),schema=r.byte();
   if(!version_byte||!schema||version_byte.value.value()!=version||schema.value.value()!=1)return Result<HolderBoundEnvelope>::fail(ErrorCode::unsupported,"unknown holder proof envelope version");
   auto request_bytes=r.lp(l.max_input),credential_bytes=r.lp(l.max_field),kb_bytes=r.lp(l.max_field);
-  auto credential_commitment=r.lp(l.max_proof),kb_commitment=r.lp(l.max_proof),bridge=r.lp(112),credential_proof=r.lp(l.max_proof),kb_proof=r.lp(l.max_proof),status_proof=r.lp(l.max_proof);
-  if(!request_bytes||!credential_bytes||!kb_bytes||!credential_commitment||!kb_commitment||!bridge||!credential_proof||!kb_proof||!status_proof||r.p!=b.size())return Result<HolderBoundEnvelope>::fail(ErrorCode::noncanonical,"truncated or trailing holder proof envelope");
+  auto credential_commitment=r.lp(l.max_proof),kb_commitment=r.lp(l.max_proof),bridge=r.lp(112),credential_proof=r.lp(l.max_proof),kb_proof=r.lp(l.max_proof),status_bridge=r.lp(32),status_proof=r.lp(l.max_proof);
+  if(!request_bytes||!credential_bytes||!kb_bytes||!credential_commitment||!kb_commitment||!bridge||!credential_proof||!kb_proof||!status_bridge||status_bridge.value->size()!=32||!status_proof||r.p!=b.size())return Result<HolderBoundEnvelope>::fail(ErrorCode::noncanonical,"truncated or trailing holder proof envelope");
   auto request=decode_request(*request_bytes.value,l);
   auto credential=decode_identity(*credential_bytes.value,l);
   auto kb=decode_identity(*kb_bytes.value,l);
   if(!request||!credential||!kb)return Result<HolderBoundEnvelope>::fail(ErrorCode::malformed,"invalid holder proof envelope fields");
-  HolderBoundEnvelope out{*request.value,*credential.value,*kb.value,*credential_commitment.value,*kb_commitment.value,*bridge.value,*credential_proof.value,*kb_proof.value,*status_proof.value};
+  std::array<std::uint8_t,32> status_commitment{}; std::copy_n(status_bridge.value->begin(),32,status_commitment.begin());
+  HolderBoundEnvelope out{*request.value,*credential.value,*kb.value,*credential_commitment.value,*kb_commitment.value,*bridge.value,*credential_proof.value,*kb_proof.value,status_commitment,*status_proof.value};
   if (out.request.status_public.empty() != out.status_proof.empty())
     return Result<HolderBoundEnvelope>::fail(
         ErrorCode::malformed, "status policy/proof mismatch");
+  if (out.request.status_public.empty() &&
+      std::any_of(out.status_bridge_commitment.begin(),
+                  out.status_bridge_commitment.end(),
+                  [](std::uint8_t byte) { return byte != 0; }))
+    return Result<HolderBoundEnvelope>::fail(
+        ErrorCode::noncanonical, "statusless holder bridge must be zero");
   auto valid=holder_shape(out,l); if(!valid)return Result<HolderBoundEnvelope>::fail(valid.error->code,valid.error->message);
   return Result<HolderBoundEnvelope>::ok(std::move(out));
 }
@@ -133,7 +146,7 @@ Result<HolderBoundEnvelope> prove_holder_bound_envelope_v1(
         request.request, request.credential_identity, request.kb_identity,
         std::move(*credential_commitment.value), std::move(*kb_commitment.value),
         std::move(*bridge.value), std::move(*credential_proof.value),
-        std::move(*kb_proof.value), {}};
+        std::move(*kb_proof.value), {}, {}};
     const auto shape = holder_shape(envelope, limits);
     if (!shape)
       return Result<HolderBoundEnvelope>::fail(shape.error->code,

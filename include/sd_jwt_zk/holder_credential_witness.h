@@ -18,7 +18,8 @@ struct HolderCredentialPublicInputsV1 {
   proofs::GF2_128<>::Elt bridge_challenge{};
   bool policy_result{};
   bool status_required{};
-  std::array<std::uint8_t, 32> status_credential_binding{};
+  std::array<std::uint8_t, 32> status_context{};
+  std::array<std::uint8_t, 32> status_commitment{};
 };
 
 

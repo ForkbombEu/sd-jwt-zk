@@ -71,11 +71,16 @@ int main() {
     const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
         status_issuer, 3, credential_binding,
         sd_jwt_zk::CredentialStatusV1::valid);
+    auto other_binding = credential_binding;
+    other_binding[0] ^= 1;
+    const auto other_valid_leaf = sd_jwt_zk::status_leaf_v1(
+        status_issuer, 3, other_binding,
+        sd_jwt_zk::CredentialStatusV1::valid);
     const auto revoked_leaf = sd_jwt_zk::status_leaf_v1(
         status_issuer, 3, credential_binding,
         sd_jwt_zk::CredentialStatusV1::revoked);
     proofs::MerkleTree status_tree(4);
-    status_tree.set_leaf(0, revoked_leaf);
+    status_tree.set_leaf(0, other_valid_leaf);
     status_tree.set_leaf(1, valid_leaf);
     status_tree.set_leaf(2, revoked_leaf);
     status_tree.set_leaf(3, revoked_leaf);
@@ -83,8 +88,12 @@ int main() {
     const std::size_t status_index = 1;
     std::vector<proofs::Digest> status_path;
     status_tree.generate_compressed_proof(status_path, &status_index, 1);
+    const std::size_t other_status_index = 0;
+    std::vector<proofs::Digest> other_status_path;
+    status_tree.generate_compressed_proof(other_status_path, &other_status_index,
+                                          1);
     request.status_public = sd_jwt_zk::encode_status_policy_v1(
-        {{status_issuer, status_root, 3, 100, 200}, credential_binding});
+        {{status_issuer, status_root, 3, 100, 200}});
     const sd_jwt_zk::StatusMembershipWitnessV1 status_witness{status_index,
                                                                status_path};
 
@@ -169,16 +178,40 @@ int main() {
     tampered_status.proof.back() ^= 1;
     require(expect_reject(tampered_status, request, 150),
             "invalid status proof accepted");
-    auto credential_b = request;
-    auto credential_b_policy =
-        *sd_jwt_zk::decode_status_policy_v1(request.status_public).value;
-    credential_b_policy.credential_binding.back() ^= 1;
-    credential_b.status_public =
-        sd_jwt_zk::encode_status_policy_v1(credential_b_policy);
-    require(!sd_jwt_zk::prove_flat_bearer_v1(
-                credential_b, *witness.value, status_witness),
-            "credential A proved status for credential B");
-
+    auto tampered_bridge = *envelope.value;
+    const std::size_t presentation_size =
+        (static_cast<std::size_t>(tampered_bridge.proof[0]) << 24) |
+        (static_cast<std::size_t>(tampered_bridge.proof[1]) << 16) |
+        (static_cast<std::size_t>(tampered_bridge.proof[2]) << 8) |
+        tampered_bridge.proof[3];
+    tampered_bridge.proof[4 + presentation_size] ^= 1;
+    require(expect_reject(tampered_bridge, request, 150),
+            "substituted status bridge commitment accepted");
+    const auto same_context = sd_jwt_zk::transcript_seed(request);
+    const auto status_policy =
+        sd_jwt_zk::decode_status_policy_v1(request.status_public);
+    require(static_cast<bool>(status_policy), "status policy decode failed");
+    const auto other_status = sd_jwt_zk::prove_status_membership_v1(
+        status_policy.value->snapshot, other_binding, other_status_index,
+        other_status_path, same_context);
+    require(static_cast<bool>(other_status),
+            "different credential status proof failed");
+    const auto other_verified = sd_jwt_zk::verify_status_membership_v1(
+        *other_status.value, status_policy.value->snapshot, status_issuer, 3,
+        150, same_context);
+    require(other_verified && *other_verified.value,
+            "different credential status proof did not verify standalone");
+    auto other_credential_splice = *envelope.value;
+    other_credential_splice.proof.resize(4 + presentation_size);
+    other_credential_splice.proof.insert(
+        other_credential_splice.proof.end(),
+        other_status.value->bridge_commitment.begin(),
+        other_status.value->bridge_commitment.end());
+    other_credential_splice.proof.insert(other_credential_splice.proof.end(),
+                                         other_status.value->proof.begin(),
+                                         other_status.value->proof.end());
+    require(expect_reject(other_credential_splice, request, 150),
+            "bearer verifier accepted a different credential status proof");
     auto unsupported = request;
     unsupported.identity.query_count += 1;
     require(expect_reject(*envelope.value, unsupported, 150),

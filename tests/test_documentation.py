@@ -31,3 +31,11 @@ class DocumentationTests(unittest.TestCase):
             self.assertIn(identity, text)
         for label in ("public", "private", "external", "Capacity buckets leak", "Status is deliberately staged"):
             self.assertIn(label, text)
+
+    def test_local_status_governance_does_not_overclaim(self):
+        text = (ROOT / "spec/local-status-v1.md").read_text()
+        for claim in ("strictly monotonic", "rolled back", "unavailable",
+                      "status cohort", "private index", "fixed-depth"):
+            self.assertIn(claim, text)
+        for forbidden in ("Swiss-compatible", "issuer-hiding", "aggregate status"):
+            self.assertNotIn(forbidden, text)

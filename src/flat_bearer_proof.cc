@@ -109,25 +109,30 @@ Result<bool> validate_request(const Request& request, const Limits& limits) {
   return Result<bool>::ok(true);
 }
 
-Bytes frame_status_proof(const Bytes& presentation, const Bytes& status) {
+Bytes frame_status_proof(const Bytes& presentation,
+                         const std::array<std::uint8_t, 32>& bridge,
+                         const Bytes& status) {
   Bytes output;
-  output.reserve(4 + presentation.size() + status.size());
+  output.reserve(4 + presentation.size() + bridge.size() + status.size());
   const auto size = static_cast<std::uint32_t>(presentation.size());
   for (int shift = 24; shift >= 0; shift -= 8)
     output.push_back(static_cast<std::uint8_t>(size >> shift));
   output.insert(output.end(), presentation.begin(), presentation.end());
+  output.insert(output.end(), bridge.begin(), bridge.end());
   output.insert(output.end(), status.begin(), status.end());
   return output;
 }
 
-bool split_status_proof(const Bytes& framed, Bytes* presentation, Bytes* status) {
-  if (framed.size() < 5) return false;
+bool split_status_proof(const Bytes& framed, Bytes* presentation,
+                        std::array<std::uint8_t, 32>* bridge, Bytes* status) {
+  if (framed.size() < 37) return false;
   std::uint32_t size = 0;
   for (std::size_t i = 0; i < 4; ++i) size = (size << 8) | framed[i];
-  if (size == 0 || size > framed.size() - 4 || size == framed.size() - 4)
+  if (size == 0 || size + 36 > framed.size())
     return false;
   presentation->assign(framed.begin() + 4, framed.begin() + 4 + size);
-  status->assign(framed.begin() + 4 + size, framed.end());
+  std::copy_n(framed.begin() + 4 + size, bridge->size(), bridge->begin());
+  status->assign(framed.begin() + 4 + size + bridge->size(), framed.end());
   return true;
 }
 
@@ -179,13 +184,16 @@ Result<Envelope> prove_flat_bearer_impl_v1(
                                  : decode_status_policy_v1(request.status_public);
   const bool status_required = static_cast<bool>(status_policy);
   const std::array<std::uint8_t, 32> status_binding =
-      status_required ? status_policy.value->credential_binding
+      status_required ? status_credential_binding_v1(witness.signing_digest)
                       : std::array<std::uint8_t, 32>{};
+  const auto status_commitment =
+      status_private_bridge_v1(status_binding, statement);
   try {
     auto& runtime = runtime_v1();
     proofs::Dense<Field> inputs(1, runtime.circuit->ninputs);
     if (!FillFlatBearerDenseWitnessV1(inputs, statement, result, witness,
-                                      status_required, status_binding))
+                                      status_required, status_binding, statement,
+                                      status_commitment))
       return Result<Envelope>::fail(ErrorCode::malformed,
                                     "dense witness encoding failed");
     proofs::ZkProof<Field> proof(*runtime.circuit, kRate, kQueries);
@@ -206,11 +214,12 @@ Result<Envelope> prove_flat_bearer_impl_v1(
       const auto policy = decode_status_policy_v1(request.status_public);
       if (!policy) return Result<Envelope>::fail(policy.error->code, policy.error->message);
       auto status = prove_status_membership_v1(
-          policy.value->snapshot, policy.value->credential_binding,
+          policy.value->snapshot, status_binding,
           status_witness->private_index, status_witness->compressed_proof,
           statement, limits);
       if (!status) return Result<Envelope>::fail(status.error->code, status.error->message);
-      proof_bytes = frame_status_proof(proof_bytes, status.value->proof);
+      proof_bytes = frame_status_proof(proof_bytes, status.value->bridge_commitment,
+                                       status.value->proof);
     } else if (status_witness) {
       return Result<Envelope>::fail(ErrorCode::malformed,
                                     "unexpected status witness");
@@ -265,21 +274,20 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
                                  : decode_status_policy_v1(
                                        expected_request.status_public);
   const bool status_required = static_cast<bool>(status_policy);
-  const std::array<std::uint8_t, 32> status_binding =
-      status_required ? status_policy.value->credential_binding
-                      : std::array<std::uint8_t, 32>{};
   Bytes presentation_proof = envelope.proof;
+  std::array<std::uint8_t, 32> bridge_commitment{};
   if (!expected_request.status_public.empty()) {
     Bytes status_proof;
-    if (!split_status_proof(envelope.proof, &presentation_proof, &status_proof))
+    if (!split_status_proof(envelope.proof, &presentation_proof,
+                            &bridge_commitment, &status_proof))
       return Result<bool>::fail(ErrorCode::noncanonical,
                                 "invalid status proof framing");
     const auto policy = decode_status_policy_v1(expected_request.status_public);
     if (!policy) return Result<bool>::fail(policy.error->code, policy.error->message);
     const auto verified = verify_status_membership_v1(
-        StatusMembershipProofV1{std::move(status_proof)}, policy.value->snapshot,
+        StatusMembershipProofV1{bridge_commitment, std::move(status_proof)}, policy.value->snapshot,
         status_issuer_v1(*issuer_key), policy.value->snapshot.epoch,
-        policy.value->credential_binding, now, statement, limits);
+        now, statement, limits);
     if (!verified) return Result<bool>::fail(verified.error->code, verified.error->message);
   }
   try {
@@ -291,7 +299,8 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
                                 "malformed or trailing proof bytes");
     proofs::Dense<Field> public_inputs(1, runtime.circuit->npub_in);
     if (!FillFlatBearerPublicInputsV1(public_inputs, statement, result,
-                                      *issuer_key, status_required, status_binding))
+                                      *issuer_key, status_required, statement,
+                                      bridge_commitment))
       return Result<bool>::fail(ErrorCode::malformed,
                                 "public input encoding failed");
     proofs::Transcript transcript(statement.data(), statement.size());

@@ -332,8 +332,11 @@ struct HolderBoundCircuitProverV1::Impl {
         const auto status = decode_status_policy_v1(policy.request.status_public);
         if (!status) return;
         credential_public.status_required = true;
-        credential_public.status_credential_binding =
-            status.value->credential_binding;
+        credential_public.status_context = transcript_seed(policy.request);
+        credential_public.status_commitment = status_private_bridge_v1(
+            status_credential_binding_v1(
+                credential_witness.credential.signing_digest),
+            credential_public.status_context);
       }
       kb_public.audience = policy.request.audience;
       kb_public.nonce = policy.request.nonce;
@@ -564,7 +567,8 @@ bool HolderBoundCircuitVerifierV1::verify(
         const auto status = decode_status_policy_v1(request.status_public);
         if (!status) return false;
         inputs.status_required = true;
-        inputs.status_credential_binding = status.value->credential_binding;
+        inputs.status_context = transcript_seed(request);
+        inputs.status_commitment = status_bridge_commitment_;
       }
       proofs::Dense<Field> dense(1, credential_circuit->npub_in);
       const auto issuer_key = request_issuer_key(request);
@@ -605,12 +609,14 @@ Result<HolderBoundEnvelope> prove_holder_bound_impl_v1(
                                                 status_policy.error->message);
     const auto binding = transcript_seed(policy.request);
     auto status = prove_status_membership_v1(
-        status_policy.value->snapshot, status_policy.value->credential_binding,
+        status_policy.value->snapshot,
+        status_credential_binding_v1(credential.credential.signing_digest),
         status_witness->private_index, status_witness->compressed_proof,
         binding, limits);
     if (!status)
       return Result<HolderBoundEnvelope>::fail(status.error->code,
                                                 status.error->message);
+    envelope.value->status_bridge_commitment = status.value->bridge_commitment;
     envelope.value->status_proof = std::move(status.value->proof);
   } else if (status_witness) {
     return Result<HolderBoundEnvelope>::fail(ErrorCode::malformed,
@@ -650,15 +656,15 @@ Result<bool> verify_holder_bound_v1(
       return Result<bool>::fail(ErrorCode::malformed, "invalid status policy");
     const auto binding = transcript_seed(expected.request);
     const auto status = verify_status_membership_v1(
-        StatusMembershipProofV1{envelope.status_proof},
+        StatusMembershipProofV1{envelope.status_bridge_commitment,
+                                envelope.status_proof},
         status_policy.value->snapshot, status_issuer_v1(*issuer_key),
         status_policy.value->snapshot.epoch,
-        status_policy.value->credential_binding,
         now, binding, limits);
     if (!status)
       return Result<bool>::fail(status.error->code, status.error->message);
   }
-  HolderBoundCircuitVerifierV1 verifier;
+  HolderBoundCircuitVerifierV1 verifier{envelope.status_bridge_commitment};
   return verify_holder_bound_envelope_v1(envelope, expected, now, verifier,
                                          replay_store, limits);
 }

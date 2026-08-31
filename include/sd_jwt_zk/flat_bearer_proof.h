@@ -10,6 +10,7 @@
 #include "sd_jwt_zk/issuer_jws_relation.h"
 #include "sd_jwt_zk/p256_coordinate_relation.h"
 #include "sd_jwt_zk/status_membership.h"
+#include "sd_jwt_zk/status_private_bridge.h"
 #include "circuits/compiler/compiler.h"
 #include "circuits/logic/compiler_backend.h"
 #include "circuits/logic/logic.h"
@@ -62,8 +63,10 @@ Result<FlatBearerWitness> flat_bearer_witness_from_presentation(
 using FlatBearerField = proofs::Fp256Base;
 using FlatBearerBackend = proofs::CompilerBackend<FlatBearerField>;
 using FlatBearerLogic = proofs::Logic<FlatBearerField, FlatBearerBackend>;
-inline constexpr std::size_t kFlatBearerPublicInputsV1 = 293;
-inline constexpr std::size_t kFlatBearerDenseInputsV1 = 22713;
+// Status credential bindings moved behind the private-input boundary.  A
+// status-capable proof has the same public bearer prefix as a statusless one.
+inline constexpr std::size_t kFlatBearerPublicInputsV1 = 549;
+inline constexpr std::size_t kFlatBearerDenseInputsV1 = 27449;
 
 // Fills the exact wire order declared by BuildFlatBearerCircuitV1.  The full
 // witness begins with the compiler's constant-one input, the public statement,
@@ -75,13 +78,16 @@ bool FillFlatBearerDenseWitnessV1(
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
     const FlatBearerWitness& witness, bool status_required = false,
-    const std::array<std::uint8_t, 32>& status_credential_binding = {});
+    const std::array<std::uint8_t, 32>& status_credential_binding = {},
+    const std::array<std::uint8_t, 32>& status_context = {},
+    const std::array<std::uint8_t, 32>& status_commitment = {});
 bool FillFlatBearerPublicInputsV1(
     proofs::Dense<FlatBearerField>& inputs,
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
     const P256Key& issuer_key, bool status_required = false,
-    const std::array<std::uint8_t, 32>& status_credential_binding = {});
+    const std::array<std::uint8_t, 32>& status_context = {},
+    const std::array<std::uint8_t, 32>& status_commitment = {});
 
 class FlatBearerReplayStoreV1 {
  public:
@@ -159,9 +165,26 @@ inline void AllocateFlatBearerRelationV1WithSource(
   const auto public_x = allocation.element();
   const auto public_y = allocation.element();
   const auto public_status_required = allocation.bit();
-  std::array<typename LogicT::v8, 32> public_status_binding{};
-  for (auto& byte : public_status_binding) byte = allocation.template value<8>();
+  // Reserved public bridge statement: request-fresh context and a SHA-256
+  // commitment to the private signing digest.  The private binding below is
+  // constrained to the issuer SHA digest before it is used by status.
+  std::array<typename LogicT::v8, 32> public_status_context{};
+  std::array<typename LogicT::v8, 32> public_status_commitment{};
+  for (auto& byte : public_status_context) byte = allocation.template value<8>();
+  for (auto& byte : public_status_commitment) byte = allocation.template value<8>();
   q->private_input();
+  std::array<typename LogicT::v8, 32> private_status_binding{};
+  for (auto& byte : private_status_binding) byte = allocation.template value<8>();
+  using StatusBridge = StatusPrivateBridgeRelationV1<LogicT>;
+  std::array<typename LogicT::v8, StatusBridge::kPaddedBytes> status_bridge_padded{};
+  for (auto& byte : status_bridge_padded) byte = allocation.template value<8>();
+  std::array<typename StatusBridge::Sha::BlockWitness, StatusBridge::kBlocks>
+      status_bridge_witness{};
+  for (auto& witness : status_bridge_witness) witness.input(logic);
+  typename LogicT::v256 status_bridge_digest{};
+  for (auto& bit : status_bridge_digest) bit = allocation.bit();
+  // The bridge SHA relation is allocated with its witness advice in the
+  // private partition after the credential-bound signing digest.
   typename LogicT::template bitvec<256> registry_x_bits{}, registry_y_bits{};
   for (auto* coordinate : {&registry_x_bits, &registry_y_bits})
     for (auto& bit : *coordinate) bit = allocation.bit();
@@ -215,13 +238,16 @@ inline void AllocateFlatBearerRelationV1WithSource(
   if (payload_length_binding != nullptr) *payload_length_binding = payload_len;
   const auto explicit_sha = allocation.bit();
   const auto digest = allocation.element();
-  for (std::size_t byte = 0; byte < public_status_binding.size(); ++byte) {
+  for (std::size_t byte = 0; byte < private_status_binding.size(); ++byte) {
     typename LogicT::template bitvec<8> digest_byte{};
     for (std::size_t bit = 0; bit < 8; ++bit)
       digest_byte[bit] = digest_bits[(31 - byte) * 8 + bit];
     logic.assert_implies(public_status_required,
-                         logic.veq(public_status_binding[byte], digest_byte));
+                         logic.veq(private_status_binding[byte], digest_byte));
   }
+  StatusBridge(logic).assert_valid({private_status_binding, public_status_context,
+                                    public_status_commitment, status_bridge_padded,
+                                    status_bridge_witness, status_bridge_digest});
   // The issuer-side bridge exports the exact signing-input SHA-256 bytes only
   // through the existing public statement.  A disclosure circuit may bind an
   // opening to these values, but cannot substitute an arbitrary private

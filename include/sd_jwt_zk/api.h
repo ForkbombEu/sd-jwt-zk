@@ -42,6 +42,7 @@ struct HolderBoundEnvelope {
   Bytes bridge_public;
   Bytes credential_proof;
   Bytes kb_proof;
+  std::array<std::uint8_t, 32> status_bridge_commitment{};
   Bytes status_proof;
 };
 

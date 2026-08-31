@@ -20,6 +20,7 @@
 #include "sd_jwt_zk/holder_issuer_jws_relation.h"
 #include "sd_jwt_zk/presentation_hash_relation.h"
 #include "sd_jwt_zk/p256_coordinate_relation.h"
+#include "sd_jwt_zk/status_private_bridge.h"
 
 namespace sd_jwt_zk {
 using HolderCredentialField = proofs::Fp256Base;
@@ -51,7 +52,7 @@ BuildHolderCredentialCircuitV1(
   // The first real-proof V1 bucket fixes the authenticated compact length at
   // 514 bytes (seven signing blocks) while retaining zero-padded parser
   // capacity.  Larger active compact lengths require a distinct circuit ID.
-  constexpr std::size_t B = 7, H = 102, P = 472, Pad = 384, Compact = 662;
+  constexpr std::size_t B = 10, H = 102, P = 472, Pad = 384, Compact = 662;
   constexpr std::size_t DisclosureChars = 42, ActiveCompact = 514;
   constexpr std::size_t PresentationBlocks = 9;
   using L = HolderCredentialLogic;
@@ -79,13 +80,27 @@ BuildHolderCredentialCircuitV1(
   const auto av = logic.vinput<128>();
   const auto policy = logic.input();
   const auto status_required = logic.input();
-  std::array<L::v8, 32> status_binding{};
-  for (auto& byte : status_binding) byte = logic.template vinput<8>();
   L::EltW issuer_x{}, issuer_y{};
   issuer_x = logic.eltw_input();
   issuer_y = logic.eltw_input();
+  std::array<L::v8, 32> status_context{}, status_commitment{};
+  for (auto& byte : status_context) byte = logic.template vinput<8>();
+  for (auto& byte : status_commitment) byte = logic.template vinput<8>();
   if (layout) layout->begin(q->ninput_);
   q->private_input();
+  const auto status_start = q->ninput_;
+  std::array<L::v8, 32> status_binding{};
+  for (auto& byte : status_binding) byte = logic.template vinput<8>();
+  if (layout) layout->add("status-private-binding", status_start, q->ninput_);
+  const auto status_bridge_start = q->ninput_;
+  using StatusBridge = StatusPrivateBridgeRelationV1<L>;
+  std::array<L::v8, StatusBridge::kPaddedBytes> status_bridge_padded{};
+  for (auto& byte : status_bridge_padded) byte = logic.template vinput<8>();
+  std::array<typename StatusBridge::Sha::BlockWitness, StatusBridge::kBlocks> status_bridge_witness{};
+  for (auto& witness : status_bridge_witness) witness.input(logic);
+  L::v256 status_bridge_digest{};
+  for (auto& bit : status_bridge_digest) bit = logic.input();
+  if (layout) layout->add("status-private-bridge", status_bridge_start, q->ninput_);
   const auto issuer_start = q->ninput_;
   auto sha_in = holder_credential_detail::bytes<L, 64 * B>(logic);
   std::array<Sha::BlockWitness, B> sha_w{}; for (auto& w : sha_w) w.input(logic);
@@ -114,7 +129,7 @@ BuildHolderCredentialCircuitV1(
   auto compact_len = holder_credential_detail::bits<L, 10>(logic);
   typename Issuer::Input issuer{sha_in, sha_w, digest_bits, header, header_json,
       payload, payload_json, header_len, payload_len, padded, issuer_len, vct_len,
-      decoded_len, explicit_sha, issuer_x, issuer_y, issuer_digest, issuer_ecdsa, B};
+      decoded_len, explicit_sha, issuer_x, issuer_y, issuer_digest, issuer_ecdsa, 7};
   auto disclosure = holder_credential_detail::bytes<L, DisclosureChars>(logic);
   auto disclosure_sha = holder_credential_detail::bytes<L, 64>(logic);
   std::array<Sha::BlockWitness, 1> disclosure_w{}; disclosure_w[0].input(logic);
@@ -169,6 +184,9 @@ BuildHolderCredentialCircuitV1(
     logic.assert_implies(status_required,
                          logic.veq(status_binding[byte], digest_byte));
   }
+  StatusBridge(logic).assert_valid({status_binding, status_context,
+                                    status_commitment, status_bridge_padded,
+                                    status_bridge_witness, status_bridge_digest});
 #ifdef SD_JWT_ZK_HOLDER_FACTORY_METRICS
   stage("active-presentation-sha");
 #endif

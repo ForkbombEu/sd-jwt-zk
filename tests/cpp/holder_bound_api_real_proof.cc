@@ -76,11 +76,16 @@ int main() {
     const auto valid_leaf = sd_jwt_zk::status_leaf_v1(
         status_issuer, 5, credential_binding,
         sd_jwt_zk::CredentialStatusV1::valid);
+    auto other_binding = credential_binding;
+    other_binding[0] ^= 1;
+    const auto other_valid_leaf = sd_jwt_zk::status_leaf_v1(
+        status_issuer, 5, other_binding,
+        sd_jwt_zk::CredentialStatusV1::valid);
     const auto revoked_leaf = sd_jwt_zk::status_leaf_v1(
         status_issuer, 5, credential_binding,
         sd_jwt_zk::CredentialStatusV1::revoked);
     proofs::MerkleTree status_tree(4);
-    status_tree.set_leaf(0, revoked_leaf);
+    status_tree.set_leaf(0, other_valid_leaf);
     status_tree.set_leaf(1, revoked_leaf);
     status_tree.set_leaf(2, valid_leaf);
     status_tree.set_leaf(3, revoked_leaf);
@@ -88,9 +93,15 @@ int main() {
     const std::size_t status_index = 2;
     std::vector<proofs::Digest> status_path;
     status_tree.generate_compressed_proof(status_path, &status_index, 1);
+    const std::size_t other_status_index = 0;
+    std::vector<proofs::Digest> other_status_path;
+    status_tree.generate_compressed_proof(other_status_path, &other_status_index,
+                                          1);
     request.status_public = sd_jwt_zk::encode_status_policy_v1(
-        {{status_issuer, status_root, 5, 1777334300, 1777334500},
-         credential_binding});
+        {{status_issuer, status_root, 5, 1777334300, 1777334500}});
+    const auto status_policy =
+        sd_jwt_zk::decode_status_policy_v1(request.status_public);
+    require(static_cast<bool>(status_policy), "status policy did not decode");
     const sd_jwt_zk::StatusMembershipWitnessV1 status_witness{status_index,
                                                                status_path};
     const auto policy = sd_jwt_zk::holder_bound_verifier_policy_v1(request);
@@ -130,15 +141,51 @@ int main() {
     require(!sd_jwt_zk::verify_holder_bound_v1(
                 tampered_status, policy, 1777334400, tampered_status_store),
             "production holder-bound verifier accepted invalid status proof");
-    auto credential_b = policy;
-    auto credential_b_status = *sd_jwt_zk::decode_status_policy_v1(
-                                    policy.request.status_public).value;
-    credential_b_status.credential_binding.back() ^= 1;
-    credential_b.request.status_public =
-        sd_jwt_zk::encode_status_policy_v1(credential_b_status);
-    require(!sd_jwt_zk::prove_holder_bound_v1(
-                credential_b, *credential.value, *kb.value, status_witness),
-            "holder credential A proved status for credential B");
+    // This is a separately valid VALID status proof under the *same* root and
+    // request context, but for a different hidden credential binding.  Swapping
+    // both framed fields must reach the presentation-circuit bridge constraint
+    // and reject rather than relying on a policy or context mismatch.
+    const auto same_context = sd_jwt_zk::transcript_seed(policy.request);
+    const auto other_status = sd_jwt_zk::prove_status_membership_v1(
+        status_policy.value->snapshot, other_binding, other_status_index,
+        other_status_path, same_context);
+    require(static_cast<bool>(other_status),
+            "other credential status proof rejected");
+    const auto other_verified = sd_jwt_zk::verify_status_membership_v1(
+        *other_status.value, status_policy.value->snapshot, status_issuer, 5,
+        1777334400, same_context);
+    require(other_verified && *other_verified.value,
+            "other credential status proof did not verify standalone");
+    auto other_credential_splice = *envelope.value;
+    other_credential_splice.status_bridge_commitment =
+        other_status.value->bridge_commitment;
+    other_credential_splice.status_proof = other_status.value->proof;
+    OneShotReplayStore other_credential_store;
+    require(!sd_jwt_zk::verify_holder_bound_v1(
+                other_credential_splice, policy, 1777334400,
+                other_credential_store),
+            "holder verifier accepted a different credential status proof");
+    auto alternate_bridge = sd_jwt_zk::transcript_seed(policy.request);
+    alternate_bridge[0] ^= 1;
+    auto alternate_status = sd_jwt_zk::prove_status_membership_v1(
+        status_policy.value->snapshot, credential_binding, status_index,
+        status_path, alternate_bridge);
+    require(static_cast<bool>(alternate_status), "alternate status proof rejected");
+    const auto alternate_verified = sd_jwt_zk::verify_status_membership_v1(
+        *alternate_status.value, status_policy.value->snapshot, status_issuer,
+        5, 1777334400, alternate_bridge);
+    require(alternate_verified && *alternate_verified.value,
+            "alternate status proof did not verify in its own bridge context");
+    // A valid status component from a distinct presentation bridge is not
+    // interchangeable with this holder envelope.
+    auto spliced_status = *envelope.value;
+    spliced_status.status_bridge_commitment =
+        alternate_status.value->bridge_commitment;
+    spliced_status.status_proof = alternate_status.value->proof;
+    OneShotReplayStore splice_store;
+    require(!sd_jwt_zk::verify_holder_bound_v1(
+                spliced_status, policy, 1777334400, splice_store),
+            "holder status component splice accepted");
     auto bearer_policy = policy;
     bearer_policy.request.identity.binding = sd_jwt_zk::Binding::bearer;
     OneShotReplayStore bearer_store;

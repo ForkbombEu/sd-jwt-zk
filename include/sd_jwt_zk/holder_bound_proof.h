@@ -65,11 +65,17 @@ class HolderBoundCircuitProverV1 final : public HolderBoundProofProverV1 {
 
 class HolderBoundCircuitVerifierV1 final : public HolderBoundProofVerifierV1 {
  public:
+  explicit HolderBoundCircuitVerifierV1(
+      std::array<std::uint8_t, 32> status_bridge_commitment = {})
+      : status_bridge_commitment_(status_bridge_commitment) {}
   bool verify(HolderComponent component, const CircuitIdentity& identity,
               const Request& request,
               const Bytes& credential_commitment,
               const Bytes& kb_commitment,
               const Bytes& bridge_public, const Bytes& proof) override;
+
+ private:
+  std::array<std::uint8_t, 32> status_bridge_commitment_{};
 };
 
 Result<HolderBoundEnvelope> prove_holder_bound_v1(

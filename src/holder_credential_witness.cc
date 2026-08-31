@@ -104,7 +104,7 @@ bool FillHolderCredentialDenseWitnessV1(
     const HolderCredentialPublicInputsV1& public_inputs,
     const HolderCredentialWitnessV1& witness,
     const HolderKbBridgeWriterV1& bridge_writer) {
-  constexpr std::size_t kSigningBlocks = 7;
+  constexpr std::size_t kSigningBlocks = 10;
   constexpr std::size_t kHeaderChars = 102;
   constexpr std::size_t kPayloadChars = 472;
   constexpr std::size_t kPayloadDecoded = 354;
@@ -112,10 +112,13 @@ bool FillHolderCredentialDenseWitnessV1(
   constexpr std::size_t kCompactChars = 662;
   constexpr std::size_t kDisclosureChars = 42;
   constexpr std::size_t kPresentationBlocks = 9;
-  if (inputs.n0_ != 1 || layout.ranges.size() != 3 ||
-      layout.ranges[0].name != "issuer-cnf-and-signature" ||
-      layout.ranges[1].name != "active-presentation" ||
-      layout.ranges[2].name != "bridge-mac" ||
+  if (inputs.n0_ != 1 || layout.ranges.size() != 5 ||
+      layout.ranges[0].name != "status-private-binding" ||
+      layout.ranges[0].count != 256 ||
+      layout.ranges[1].name != "status-private-bridge" ||
+      layout.ranges[2].name != "issuer-cnf-and-signature" ||
+      layout.ranges[3].name != "active-presentation" ||
+      layout.ranges[4].name != "bridge-mac" ||
       layout.total_inputs != inputs.n1_ ||
       witness.credential.issuer.protected_header.size() != kHeaderChars ||
       witness.credential.issuer.payload.size() > kPayloadChars ||
@@ -146,7 +149,9 @@ bool FillHolderCredentialDenseWitnessV1(
       witness.credential.signing_input.size(),
       witness.credential.signing_input.data(), kSigningBlocks, signing_blocks,
       signing_padded.data(), signing_sha.data());
-  if (signing_blocks != kSigningBlocks) return false;
+  // The 10-block bucket reserves three zero-padded advice blocks; the active
+  // compact credential still has the canonical seven SHA blocks.
+  if (signing_blocks != 7) return false;
 
   std::array<std::uint8_t, 64> disclosure_padded{};
   std::array<proofs::FlatSHA256Witness::BlockWitness, 1> disclosure_sha{};
@@ -201,12 +206,38 @@ bool FillHolderCredentialDenseWitnessV1(
       public_inputs.bridge_challenge, filler, proofs::p256_base);
   filler.push_back(proofs::p256_base.of_scalar(public_inputs.policy_result));
   filler.push_back(proofs::p256_base.of_scalar(public_inputs.status_required));
-  for (const auto byte : public_inputs.status_credential_binding)
-    fill_v8(filler, byte);
   filler.push_back(issuer_x);
   filler.push_back(issuer_y);
+  for (const auto byte : public_inputs.status_context) fill_v8(filler, byte);
+  for (const auto byte : public_inputs.status_commitment) fill_v8(filler, byte);
   if (filler.size() != layout.public_inputs) return false;
 
+  const auto status_binding =
+      status_credential_binding_v1(witness.credential.signing_digest);
+  for (const auto byte : status_binding) fill_v8(filler, byte);
+  std::string status_bridge_message{"sd-jwt-zk/status-private-bridge/v2"};
+  status_bridge_message.append(reinterpret_cast<const char*>(status_binding.data()), status_binding.size());
+  status_bridge_message.append(reinterpret_cast<const char*>(public_inputs.status_context.data()), public_inputs.status_context.size());
+  std::array<std::uint8_t, 128> status_bridge_padded{};
+  std::array<proofs::FlatSHA256Witness::BlockWitness, 2> status_bridge_advice{};
+  std::uint8_t status_bridge_blocks{};
+  proofs::FlatSHA256Witness::transform_and_witness_message(status_bridge_message.size(), reinterpret_cast<const std::uint8_t*>(status_bridge_message.data()), 2, status_bridge_blocks, status_bridge_padded.data(), status_bridge_advice.data());
+  if (status_bridge_blocks != 2) return false;
+  for (const auto byte : status_bridge_padded) fill_v8(filler, byte);
+  proofs::BitPluckerEncoder<HolderKbFieldV1, 4> status_bridge_encoder(proofs::p256_base);
+  for (const auto& block : status_bridge_advice) {
+    for (std::size_t i = 0; i < 48; ++i)
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.outw[i]));
+    for (std::size_t i = 0; i < 64; ++i) {
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.oute[i]));
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.outa[i]));
+    }
+    for (std::size_t i = 0; i < 8; ++i)
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.h1[i]));
+  }
+  const auto status_bridge_nat = to_nat(public_inputs.status_commitment);
+  for (std::size_t bit = 0; bit < 256; ++bit)
+    filler.push_back(proofs::p256_base.of_scalar(status_bridge_nat.bit(bit)));
   for (const auto byte : signing_padded) fill_v8(filler, byte);
   proofs::BitPluckerEncoder<HolderKbFieldV1, 4> encoder(proofs::p256_base);
   auto fill_sha = [&](const auto& blocks) {
@@ -257,7 +288,7 @@ bool FillHolderCredentialDenseWitnessV1(
       to_nat(witness.credential.issuer_signature.s)));
   filler.push_back(holder_x);
   filler.push_back(holder_y);
-  if (filler.size() != layout.ranges[1].first) return false;
+  if (filler.size() != layout.ranges[3].first) return false;
 
   for (std::size_t i = 0; i < kCompactChars; ++i)
     fill_v8(filler, i < witness.compact_issuer.size()
@@ -285,7 +316,7 @@ bool FillHolderCredentialDenseWitnessV1(
   if (sd_hash.size() != 43) return false;
   for (const char byte : sd_hash)
     fill_v8(filler, static_cast<std::uint8_t>(byte));
-  if (filler.size() != layout.ranges[2].first) return false;
+  if (filler.size() != layout.ranges[4].first) return false;
 
   HolderKbBridgeValuesV1 bridge{};
   bridge.fields = {holder_x, holder_y,
@@ -310,10 +341,10 @@ bool FillHolderCredentialPublicInputsV1(
       public_inputs.bridge_challenge, filler, proofs::p256_base);
   filler.push_back(proofs::p256_base.of_scalar(public_inputs.policy_result));
   filler.push_back(proofs::p256_base.of_scalar(public_inputs.status_required));
-  for (const auto byte : public_inputs.status_credential_binding)
-    fill_v8(filler, byte);
   filler.push_back(proofs::p256_base.to_montgomery(to_nat(issuer_key.x)));
   filler.push_back(proofs::p256_base.to_montgomery(to_nat(issuer_key.y)));
+  for (const auto byte : public_inputs.status_context) fill_v8(filler, byte);
+  for (const auto byte : public_inputs.status_commitment) fill_v8(filler, byte);
   return filler.size() == inputs.n1_;
 }
 

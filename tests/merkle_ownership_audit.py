@@ -52,8 +52,27 @@ def audit_upstream_ownership() -> None:
     for header in NATIVE_HEADERS:
         european = LONGFELLOW / "src" / "merkle" / header
         google = GOOGLE / "lib" / "merkle" / header
-        require(european.read_bytes() == google.read_bytes(),
-                f"native Merkle header changed: {header}")
+        current = european.read_text(encoding="utf-8")
+        baseline = google.read_text(encoding="utf-8")
+        if header == "merkle_tree.h" and current != baseline:
+            # Controlled Longfellow c295424 hardening: reject trailing nodes
+            # after consuming a compressed proof.  Normalize only this exact
+            # scope move plus guard; every other byte remains pinned.
+            require("size_t sz = 0;\n    /*scope for TREE */" in current and
+                    "if (sz != proof_len)" in current,
+                    "approved trailing-proof hardening is incomplete")
+            normalized = current.replace("    size_t sz = 0;\n    /*scope for TREE */ {",
+                                         "    /*scope for TREE */ {")
+            normalized = normalized.replace("      // read the proof\n      for",
+                                            "      // read the proof\n      size_t sz = 0;\n      for")
+            normalized = re.sub(
+                r"\n    // The compressed proof has a unique traversal encoding\.  Consuming only a\n"
+                r"    // prefix would accept a second, trailing-node encoding of the same\n"
+                r"    // opening, which disagrees with the pinned Rust verifier\.\n"
+                r"    if \(sz != proof_len\) \{\n      return false;\n    \}\n",
+                "", normalized)
+            current = normalized
+        require(current == baseline, f"native Merkle header changed: {header}")
     required = (
         LONGFELLOW / "src/circuits/merkle/fixed_depth_sha256_merkle_membership.h",
         LONGFELLOW / "src/circuits/sha/flatsha256_circuit.h",
@@ -83,6 +102,36 @@ def audit_sdjwt_sources() -> None:
     require(not vector_files, "SD-JWT maintains a divergent Merkle vector corpus")
 
 
+def audit_repository_wide_status_ownership() -> None:
+    """Reject a status-specific reimplementation in every deliverable area.
+
+    Generic SHA relations elsewhere in this small research repository are not
+    status Merkle logic.  The conjunction below deliberately catches only the
+    old, forbidden pattern: status code that both constructs a Merkle path and
+    builds its per-level hash/witness advice itself.
+    """
+    ignored = {"build", ".git", ".longfellow-install", "__pycache__"}
+    candidates = [path for path in SDJWT.rglob("*") if path.is_file() and
+                  not any(part in ignored or part.startswith("build")
+                          for part in path.relative_to(SDJWT).parts)]
+    offenders = []
+    for path in candidates:
+        if path == Path(__file__):
+            continue
+        text = path.read_text(errors="ignore")
+        status_related = "status" in path.name.lower() or "status-membership" in text
+        # A status bridge may legitimately use the installed SHA gadget for a
+        # non-Merkle proof-binding commitment.  Flag only the former local
+        # Merkle-level hash construction, not that separate bridge relation.
+        manual_merkle_witness = "Digest::hash2" in text
+        manual_path = ("direction_bits" in text or "generate_compressed_proof" in text)
+        if status_related and manual_merkle_witness and manual_path:
+            offenders.append(str(path.relative_to(SDJWT)))
+    require(not offenders,
+            "status Merkle path/hash/witness work must use Longfellow's adapter: " +
+            ", ".join(offenders))
+
+
 def audit_cmake_and_install(prefix: Path) -> None:
     cmake = (SDJWT / "CMakeLists.txt").read_text(encoding="utf-8")
     require("find_package(LongfellowZK CONFIG REQUIRED)" in cmake,
@@ -108,6 +157,7 @@ def main() -> None:
     audit_matrix()
     audit_upstream_ownership()
     audit_sdjwt_sources()
+    audit_repository_wide_status_ownership()
     audit_cmake_and_install(args.install_prefix)
     print("Merkle ownership audit: single upstream primitive surface and installed-only SD-JWT dependency")
 

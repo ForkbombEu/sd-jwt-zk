@@ -123,7 +123,8 @@ bool FillFlatBearerPublicInputsV1(
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
     const P256Key& issuer_key, bool status_required,
-    const std::array<std::uint8_t, 32>& status_credential_binding) {
+    const std::array<std::uint8_t, 32>& status_context,
+    const std::array<std::uint8_t, 32>& status_commitment) {
   if (inputs.n0_ != 1 || inputs.n1_ != kFlatBearerPublicInputsV1)
     return false;
   proofs::DenseFiller<FlatBearerField> filler(inputs);
@@ -136,7 +137,8 @@ bool FillFlatBearerPublicInputsV1(
   filler.push_back(
       proofs::p256_base.to_montgomery(to_nat(issuer_key.y)));
   filler.push_back(proofs::p256_base.of_scalar(status_required));
-  for (const auto byte : status_credential_binding) fill_v8(filler, byte);
+  for (const auto byte : status_context) fill_v8(filler, byte);
+  for (const auto byte : status_commitment) fill_v8(filler, byte);
   return filler.size() == inputs.n1_;
 }
 
@@ -145,7 +147,9 @@ bool FillFlatBearerDenseWitnessV1(
     const std::array<std::uint8_t, 32>& public_statement,
     bool policy_result,
     const FlatBearerWitness& witness, bool status_required,
-    const std::array<std::uint8_t, 32>& status_credential_binding) {
+    const std::array<std::uint8_t, 32>& status_credential_binding,
+    const std::array<std::uint8_t, 32>& status_context,
+    const std::array<std::uint8_t, 32>& status_commitment) {
   constexpr std::size_t kSigningBlocks = 5;
   constexpr std::size_t kHeaderChars = 102;
   constexpr std::size_t kPayloadChars = 140;
@@ -235,7 +239,32 @@ bool FillFlatBearerDenseWitnessV1(
   filler.push_back(public_x);
   filler.push_back(public_y);
   filler.push_back(proofs::p256_base.of_scalar(status_required));
+  for (const auto byte : status_context) fill_v8(filler, byte);
+  for (const auto byte : status_commitment) fill_v8(filler, byte);
   for (const auto byte : status_credential_binding) fill_v8(filler, byte);
+  std::string status_bridge_message{"sd-jwt-zk/status-private-bridge/v2"};
+  status_bridge_message.append(reinterpret_cast<const char*>(status_credential_binding.data()), status_credential_binding.size());
+  status_bridge_message.append(reinterpret_cast<const char*>(status_context.data()), status_context.size());
+  std::array<std::uint8_t, 128> status_bridge_padded{};
+  std::array<proofs::FlatSHA256Witness::BlockWitness, 2> status_bridge_advice{};
+  std::uint8_t status_bridge_blocks{};
+  proofs::FlatSHA256Witness::transform_and_witness_message(status_bridge_message.size(), reinterpret_cast<const std::uint8_t*>(status_bridge_message.data()), 2, status_bridge_blocks, status_bridge_padded.data(), status_bridge_advice.data());
+  if (status_bridge_blocks != 2) return false;
+  for (const auto byte : status_bridge_padded) fill_v8(filler, byte);
+  proofs::BitPluckerEncoder<FlatBearerField, 4> status_bridge_encoder(proofs::p256_base);
+  for (const auto& block : status_bridge_advice) {
+    for (std::size_t i = 0; i < 48; ++i)
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.outw[i]));
+    for (std::size_t i = 0; i < 64; ++i) {
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.oute[i]));
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.outa[i]));
+    }
+    for (std::size_t i = 0; i < 8; ++i)
+      filler.push_back(status_bridge_encoder.mkpacked_v32(block.h1[i]));
+  }
+  const auto status_bridge_nat = to_nat(status_commitment);
+  for (std::size_t bit = 0; bit < 256; ++bit)
+    filler.push_back(proofs::p256_base.of_scalar(status_bridge_nat.bit(bit)));
   const auto registry_x_nat = to_nat(witness.issuer_key.x);
   const auto registry_y_nat = to_nat(witness.issuer_key.y);
   for (std::size_t bit = 0; bit < 256; ++bit)

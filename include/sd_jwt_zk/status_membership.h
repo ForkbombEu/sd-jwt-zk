@@ -8,6 +8,7 @@
 
 #include "circuits/merkle/fixed_depth_sha256_merkle_membership.h"
 #include "sd_jwt_zk/api.h"
+#include "sd_jwt_zk/status_private_bridge.h"
 
 namespace sd_jwt_zk {
 
@@ -24,11 +25,32 @@ struct StatusSnapshotPublicV1 {
 };
 
 inline constexpr std::size_t kStatusMembershipDepthV1 = 2;
+inline constexpr std::size_t kStatusSnapshotCapacityV1 =
+    std::size_t{1} << kStatusMembershipDepthV1;
+
+// This is intentionally a local, fixed-size snapshot format.  Its leaves are
+// status-leaf encodings, not a Token Status List representation.  Callers
+// authenticate `public_part` with their configured local authority before
+// giving it to the verifier; a proof never supplies its own snapshot.
+struct LocalStatusSnapshotV1 {
+  StatusSnapshotPublicV1 public_part;
+  std::array<proofs::Digest, kStatusSnapshotCapacityV1> leaves{};
+};
+
+struct LocalStatusEntryV1 {
+  std::array<std::uint8_t, 32> credential_binding{};
+  CredentialStatusV1 status{CredentialStatusV1::revoked};
+};
 
 // A status proof is a second, presentation-bound proof component.  The
 // snapshot is deliberately absent: verification always receives the trusted
 // snapshot out of band, so proof bytes cannot select their own trust root.
-struct StatusMembershipProofV1 { Bytes proof; };
+struct StatusMembershipProofV1 {
+  // Public, request-fresh SHA commitment to the private binding.  This is
+  // never the binding, Merkle leaf, index, or path.
+  std::array<std::uint8_t, 32> bridge_commitment{};
+  Bytes proof;
+};
 
 struct StatusMembershipWitnessV1 {
   std::size_t private_index{};
@@ -37,10 +59,21 @@ struct StatusMembershipWitnessV1 {
 
 struct StatusPolicyV1 {
   StatusSnapshotPublicV1 snapshot;
-  std::array<std::uint8_t, 32> credential_binding{};
 };
 
 std::array<std::uint8_t, 32> status_issuer_v1(const P256Key& issuer_key);
+Result<LocalStatusSnapshotV1> build_local_status_snapshot_v1(
+    const std::array<std::uint8_t, 32>& issuer, std::uint64_t epoch,
+    std::uint64_t valid_from, std::uint64_t valid_until,
+    const std::vector<LocalStatusEntryV1>& entries);
+Result<std::vector<proofs::Digest>> local_status_path_v1(
+    const LocalStatusSnapshotV1& snapshot, std::size_t private_index);
+// Inspection metadata: the selected root is the sole public Merkle circuit
+// value.  Leaf, index, directions, siblings, and SHA advice are private.
+std::size_t status_membership_public_input_width_v1();
+// Bridge context and commitment are public statement coordinates, but are not
+// Merkle coordinates; the selected root remains the only public Merkle value.
+std::size_t status_membership_merkle_public_input_width_v1();
 Bytes encode_status_policy_v1(const StatusPolicyV1& policy);
 Result<StatusPolicyV1> decode_status_policy_v1(const Bytes& encoded);
 std::array<std::uint8_t, 32> status_credential_binding_v1(
@@ -52,7 +85,17 @@ inline proofs::Digest status_leaf_v1(
     CredentialStatusV1 status) {
   if (status != CredentialStatusV1::valid && status != CredentialStatusV1::revoked)
     throw std::invalid_argument("unknown credential status");
-  std::string material{"sd-jwt-zk/status-leaf/v1"};
+  // Version 2 exposes no status leaf: a VALID leaf is exactly the private
+  // signing-digest binding, allowing the membership circuit to constrain the
+  // selected Merkle leaf directly.  Non-valid entries are domain-separated
+  // SHA-256 values and cannot satisfy that equality except on collision.
+  if (status == CredentialStatusV1::valid) {
+    proofs::Digest result{};
+    for (std::size_t i = 0; i < credential_binding.size(); ++i)
+      result.data[i] = credential_binding[i];
+    return result;
+  }
+  std::string material{"sd-jwt-zk/status-leaf/non-valid/v2"};
   material.append(reinterpret_cast<const char*>(issuer.data()), issuer.size());
   for (const auto value : {epoch})
     for (int shift = 56; shift >= 0; shift -= 8)
@@ -103,7 +146,6 @@ Result<bool> verify_status_membership_v1(
     const StatusSnapshotPublicV1& trusted_snapshot,
     const std::array<std::uint8_t, 32>& expected_issuer,
     std::uint64_t expected_epoch,
-    const std::array<std::uint8_t, 32>& credential_binding,
     std::uint64_t now,
     const std::array<std::uint8_t, 32>& presentation_binding,
     const Limits& limits = {});
