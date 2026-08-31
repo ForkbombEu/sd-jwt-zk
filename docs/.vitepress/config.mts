@@ -34,7 +34,8 @@ export default defineConfig({
       { text: "Operate", items: [
         { text: "Getting started", link: "/getting-started" },
         { text: "Wallet and verifier", link: "/workflows" },
-        { text: "Local status", link: "/status-operations" }
+        { text: "Local status", link: "/status-operations" },
+        { text: "Proof benchmarks", link: "/performance" }
       ]},
       { text: "Security", items: [
         { text: "Claim matrix", link: "/security-claims" },

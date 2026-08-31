@@ -1,0 +1,163 @@
+name: benchmarked-release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: benchmarked-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find release baseline
+        id: tags
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          latest="$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n 1)"
+          if [[ -n "${latest}" ]]; then
+            printf 'has_release=true\nlatest=%s\n' "${latest}" >> "${GITHUB_OUTPUT}"
+          else
+            printf 'has_release=false\nlatest=\n' >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Calculate the next Conventional Commit version
+        if: steps.tags.outputs.has_release == 'true'
+        id: semver
+        uses: ietf-tools/semver-action@v1
+        with:
+          token: ${{ github.token }}
+          branch: main
+          noNewCommitBehavior: current
+          noVersionBumpBehavior: current
+          skipInvalidTags: true
+          tagFilter: '^v?[0-9]+\.[0-9]+\.[0-9]+$'
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          HAS_RELEASE: ${{ steps.tags.outputs.has_release }}
+          SEMVER_NEXT: ${{ steps.semver.outputs.next }}
+          SEMVER_NEXT_STRICT: ${{ steps.semver.outputs.nextStrict }}
+          SEMVER_BUMP: ${{ steps.semver.outputs.bump }}
+        run: |
+          set -Eeuo pipefail
+          if [[ "${HAS_RELEASE}" == "false" ]]; then
+            version="v1.0.0"
+            strict="1.0.0"
+            should_release="true"
+          else
+            version="${SEMVER_NEXT}"
+            strict="${SEMVER_NEXT_STRICT}"
+            [[ -n "${version}" && -n "${strict}" ]] || {
+              printf '%s\n' 'semantic version action returned no version' >&2
+              exit 1
+            }
+            if [[ "${SEMVER_BUMP}" == "none" || -z "${SEMVER_BUMP}" ]]; then
+              should_release="false"
+            else
+              should_release="true"
+            fi
+          fi
+          printf 'version=%s\nstrict=%s\nshould_release=%s\n' \
+            "${version}" "${strict}" "${should_release}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install build tools
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ccache cmake ninja-build libssl-dev
+
+      - name: Check out pinned Longfellow
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: dyne/longfellow-zk
+          ref: 6850cf53f80fea4727fb05c84f4a9d7870bf8091
+          path: .deps/longfellow-zk
+
+      - name: Build installed Longfellow dependency
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          SD_JWT_ZK_LONGFELLOW_SOURCE: ${{ github.workspace }}/.deps/longfellow-zk
+        run: ./ci/install-longfellow.sh "${RUNNER_TEMP}/longfellow"
+
+      - name: Configure release and real-proof benchmarks
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.strict }}
+        run: |
+          cmake -S . -B "${RUNNER_TEMP}/sd-jwt-zk-release" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_PREFIX_PATH="${RUNNER_TEMP}/longfellow" \
+            -DSD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS=ON \
+            -DSD_JWT_ZK_VERSION="${RELEASE_VERSION}"
+
+      - name: Run real-proof benchmarks
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          cmake --build "${RUNNER_TEMP}/sd-jwt-zk-release" \
+            --target benchmark --parallel 1
+          cat "${RUNNER_TEMP}/sd-jwt-zk-release/benchmarks/sd-jwt-zk-benchmarks.md" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Build release packages
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.strict }}
+        run: |
+          set -Eeuo pipefail
+          build_dir="${RUNNER_TEMP}/sd-jwt-zk-release"
+          artifacts="${RUNNER_TEMP}/release-artifacts"
+          package_parent="${RUNNER_TEMP}/release-package"
+          package_name="sd-jwt-zk-${RELEASE_VERSION}-linux-x86_64"
+          package_root="${package_parent}/${package_name}"
+          mkdir -p "${artifacts}" "${package_root}"
+          cmake --build "${build_dir}" \
+            --target sd-jwt-zk-cli package_source --parallel 2
+          cmake --install "${build_dir}" --prefix "${package_root}"
+          tar -C "${package_parent}" -czf "${artifacts}/${package_name}.tar.gz" \
+            "${package_name}"
+          cp "${build_dir}/sd-jwt-zk-${RELEASE_VERSION}-Source.tar.gz" \
+            "${artifacts}/"
+          cp "${build_dir}/benchmarks/sd-jwt-zk-benchmarks.csv" "${artifacts}/"
+          cp "${build_dir}/benchmarks/sd-jwt-zk-benchmarks.json" "${artifacts}/"
+          cp "${build_dir}/benchmarks/sd-jwt-zk-benchmarks.md" "${artifacts}/"
+          (cd "${artifacts}" && sha256sum ./* > SHA256SUMS)
+
+      - name: Upload reusable release candidate
+        if: steps.version.outputs.should_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-jwt-zk-${{ steps.version.outputs.version }}
+          path: ${{ runner.temp }}/release-artifacts/
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          benchmark_notes="$(cat \
+            "${RUNNER_TEMP}/release-artifacts/sd-jwt-zk-benchmarks.md")"
+          gh release create "${RELEASE_VERSION}" \
+            "${RUNNER_TEMP}/release-artifacts/"* \
+            --target "${GITHUB_SHA}" \
+            --title "${RELEASE_VERSION}" \
+            --generate-notes \
+            --notes "${benchmark_notes}"

@@ -41,11 +41,11 @@ jobs:
           SD_JWT_ZK_QUALITY_BUILD_DIR: ${{ runner.temp }}/sd-jwt-zk-quality
         run: ./ci/quality.sh
       - name: Write source checksum
-        run: ./ci/write-checksum.sh "$RUNNER_TEMP/sd-jwt-zk-build/sd-jwt-zk-0.1.0-Source.tar.gz" "$RUNNER_TEMP/sd-jwt-zk-build/SHA256SUMS"
+        run: ./ci/write-checksum.sh "$RUNNER_TEMP/sd-jwt-zk-build/sd-jwt-zk-1.0.0-Source.tar.gz" "$RUNNER_TEMP/sd-jwt-zk-build/SHA256SUMS"
       - name: Publish source candidate
         uses: actions/upload-artifact@v4
         with:
           name: sd-jwt-zk-source-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/sd-jwt-zk-build/sd-jwt-zk-0.1.0-Source.tar.gz
+            ${{ runner.temp }}/sd-jwt-zk-build/sd-jwt-zk-1.0.0-Source.tar.gz
             ${{ runner.temp }}/sd-jwt-zk-build/SHA256SUMS
