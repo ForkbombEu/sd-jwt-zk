@@ -157,7 +157,7 @@ class IssuerJwsRelation {
     base64.decode_active(in.header_b64, header, in.header_b64_length);
     constexpr char expected_header[] =
         "{\"alg\":\"ES256\",\"typ\":\"dc+sd-jwt\",\"profile_version\":\"swiss-profile-vc:1.0.0\"}";
-    static_assert(sizeof(expected_header) - 1 == header.size());
+    static_assert(sizeof(expected_header) - 1 == (HeaderChars * 6) / 8);
     for (std::size_t i = 0; i < header.size(); ++i)
       logic_.vassert_eq(header[i], static_cast<unsigned char>(expected_header[i]));
 
