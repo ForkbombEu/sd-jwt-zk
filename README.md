@@ -60,6 +60,27 @@ promises; see `docs/release-assurance.md`.
 
 The installed CMake package is `SDJWTZK`; downstream users call `find_package(SDJWTZK CONFIG REQUIRED)` and link `SDJWTZK::sd-jwt-zk`.
 
+## Benchmarks and releases
+
+Configure with `SD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS=ON`, then run:
+
+```sh
+cmake --build build --target benchmark --parallel 1
+```
+
+The target executes real prove, verify, and supported randomized-repeat
+operations for the shipped bearer, holder-bound, and local-status proof
+families. It writes
+raw CSV, structured JSON, and a Markdown summary under `build/benchmarks`,
+including proof-component sizes and machine/toolchain metadata. Timings are
+environment-specific observations rather than promises. See
+[`docs/performance.md`](docs/performance.md) for the schema and direct runner
+usage.
+
+GitHub releases attach those reports, a Linux x86-64 installed build, the source
+archive, and checksums. A tagless repository starts at `v1.0.0`; later versions
+are calculated from Conventional Commits with `ietf-tools/semver-action`.
+
 ## CLI
 
 Public challenge material is explicit, while nonce material is read from an

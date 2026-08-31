@@ -17,6 +17,7 @@
  */
 
 #include <array>
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <vector>
@@ -24,11 +25,19 @@
 #include "sd_jwt_zk/status_membership.h"
 
 namespace {
+using Clock = std::chrono::steady_clock;
+
 void require(bool value, const char* label = "require") {
   if (!value) {
     std::cerr << label << '\n';
     std::exit(1);
   }
+}
+
+std::uint64_t milliseconds(Clock::time_point start, Clock::time_point end) {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+          .count());
 }
 }
 
@@ -64,14 +73,20 @@ int main() {
   require(sd_jwt_zk::status_membership_public_input_width_v1() == 768,
           "total public status statement width");
 
+  const auto prove_start = Clock::now();
   auto proof = sd_jwt_zk::prove_status_membership_v1(
       snapshot, credential_binding, index, *compressed.value, binding);
+  const auto prove_end = Clock::now();
   require(static_cast<bool>(proof), "status prover");
+  const auto verify_start = Clock::now();
   auto verified = sd_jwt_zk::verify_status_membership_v1(
       *proof.value, snapshot, issuer, kEpoch, 15, binding);
+  const auto verify_end = Clock::now();
   require(verified && *verified.value);
+  const auto rerandomize_start = Clock::now();
   auto repeated = sd_jwt_zk::prove_status_membership_v1(
       snapshot, credential_binding, index, *compressed.value, binding);
+  const auto rerandomize_end = Clock::now();
   require(repeated && repeated.value->proof != proof.value->proof);
 
   auto wrong_root = snapshot;
@@ -101,4 +116,14 @@ int main() {
   const auto revoked_snapshot = revoked_local.value->public_part;
   require(!sd_jwt_zk::prove_status_membership_v1(
       revoked_snapshot, credential_binding, index, *revoked_proof.value, binding));
+
+  std::cout << "public-inputs="
+            << sd_jwt_zk::status_membership_public_input_width_v1()
+            << " prove-ms=" << milliseconds(prove_start, prove_end)
+            << " rerandomize-ms="
+            << milliseconds(rerandomize_start, rerandomize_end)
+            << " verify-ms=" << milliseconds(verify_start, verify_end)
+            << " proof-bytes=" << proof.value->proof.size()
+            << " bridge-commitment-bytes="
+            << proof.value->bridge_commitment.size() << '\n';
 }

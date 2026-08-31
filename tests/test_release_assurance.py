@@ -53,7 +53,7 @@ This is free and open source software provided without warranty under the terms 
             ".h", ".hpp", ".cc", ".cpp", ".py", ".sh", ".js", ".mjs",
             ".ts", ".mts", ".cmake",
         }
-        excluded_parts = {".git", "node_modules", "vendor"}
+        excluded_parts = {".deps", ".git", "node_modules", "vendor"}
         sources = []
         for path in ROOT.rglob("*"):
             relative = path.relative_to(ROOT)
@@ -68,7 +68,7 @@ This is free and open source software provided without warranty under the terms 
             if (path.suffix in source_suffixes or
                     path.name in {"CMakeLists.txt", "SDJWTZKConfig.cmake.in"}):
                 sources.append(path)
-        self.assertEqual(len(sources), 109)
+        self.assertEqual(len(sources), 112)
         for source in sources:
             opening = "\n".join(source.read_text().splitlines()[:4])
             self.assertIn(copyright_line, opening, source)

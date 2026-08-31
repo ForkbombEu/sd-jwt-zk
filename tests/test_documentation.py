@@ -26,6 +26,7 @@ class DocumentationTests(unittest.TestCase):
             "two-slot-relation.md", "getting-started.md", "workflows.md",
             "status-operations.md", "security-claims.md", "privacy.md",
             "unsupported.md", "glossary.md", "specification.md", "api.md",
+            "performance.md",
         }
         self.assertTrue(required.issubset({path.name for path in (ROOT / "docs").glob("*.md")}))
         site = "\n".join(path.read_text() for path in (ROOT / "docs").glob("*.md"))

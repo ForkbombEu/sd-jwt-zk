@@ -43,6 +43,19 @@ class ReleasePolicyTests(unittest.TestCase):
         self.assertIn("write-checksum.sh", workflow)
         self.assertIn("actions/upload-artifact@v4", workflow)
 
+    def test_benchmarked_release_bootstraps_and_then_uses_conventional_commits(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text()
+        for required in (
+            "v1.0.0", "ietf-tools/semver-action@v1", "--target benchmark",
+            "sd-jwt-zk-benchmarks.csv", "sd-jwt-zk-benchmarks.json",
+            "sd-jwt-zk-benchmarks.md", "benchmark_notes", "SHA256SUMS",
+            "gh release create",
+        ):
+            self.assertIn(required, workflow)
+        self.assertIn("contents: write", workflow)
+        self.assertIn('SD_JWT_ZK_VERSION "1.0.0"',
+                      (ROOT / "CMakeLists.txt").read_text())
+
 
 if __name__ == "__main__":
     unittest.main()

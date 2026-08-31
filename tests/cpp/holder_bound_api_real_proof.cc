@@ -17,9 +17,11 @@
  */
 
 #include <atomic>
+#include <chrono>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <sys/resource.h>
 #include <utility>
 #include <vector>
 
@@ -28,6 +30,8 @@
 #include "nested_es256_fixture.h"
 
 namespace {
+
+using Clock = std::chrono::steady_clock;
 
 constexpr char kIssuerX[] = "mghCtkDvYlhoIJv3V9ntUSzKasQTW2-ieOZCkmyat6Q";
 constexpr char kIssuerY[] = "WZmOD4TDO1MqiMdF-bLKRzqFOsZ4l-lrOBo5vNcVTAQ";
@@ -55,6 +59,12 @@ class OneShotReplayStore final : public sd_jwt_zk::HolderBoundReplayStoreV1 {
 
 void require(bool value, const char* message) {
   if (!value) throw std::runtime_error(message);
+}
+
+std::uint64_t milliseconds(Clock::time_point start, Clock::time_point end) {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+          .count());
 }
 
 }  // namespace
@@ -169,14 +179,18 @@ int main() {
                                                                status_path};
     const auto policy = sd_jwt_zk::holder_bound_verifier_policy_v1(request);
 
+    const auto prove_start = Clock::now();
     const auto envelope = sd_jwt_zk::prove_holder_bound_v1(
         policy, *credential.value, *kb.value, status_witness);
+    const auto prove_end = Clock::now();
     if (!envelope)
       throw std::runtime_error("production holder-bound prover rejected fixture: " +
                                envelope.error->message);
     OneShotReplayStore replay;
+    const auto verify_start = Clock::now();
     const auto accepted = sd_jwt_zk::verify_holder_bound_v1(
         *envelope.value, policy, 1777334400, replay);
+    const auto verify_end = Clock::now();
     require(accepted && *accepted.value,
             "production holder-bound verifier rejected fixture");
     auto changed_bridge = *envelope.value;
@@ -259,6 +273,19 @@ int main() {
         *envelope.value, policy, 1777334400, replay);
     require(!replayed,
             "production holder-bound verifier accepted replay");
+    rusage usage{};
+    getrusage(RUSAGE_SELF, &usage);
+    const auto aggregate = envelope.value->credential_proof.size() +
+                           envelope.value->kb_proof.size() +
+                           envelope.value->status_proof.size();
+    std::cout << "credential-proof-bytes="
+              << envelope.value->credential_proof.size()
+              << " kb-proof-bytes=" << envelope.value->kb_proof.size()
+              << " status-proof-bytes=" << envelope.value->status_proof.size()
+              << " aggregate-proof-bytes=" << aggregate
+              << " prove-ms=" << milliseconds(prove_start, prove_end)
+              << " verify-ms=" << milliseconds(verify_start, verify_end)
+              << " peak-rss-kb=" << usage.ru_maxrss << '\n';
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

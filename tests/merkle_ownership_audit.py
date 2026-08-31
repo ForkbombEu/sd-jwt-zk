@@ -20,14 +20,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 
 
 SDJWT = Path(__file__).resolve().parents[1]
 WORKSPACE = SDJWT.parent
-LONGFELLOW = WORKSPACE / "longfellow-zk"
-GOOGLE = WORKSPACE / "google-longfellow-zk"
 MATRIX = SDJWT / "tests" / "merkle_ownership_matrix.json"
 
 NATIVE_HEADERS = ("merkle_tree.h", "merkle_commitment.h")
@@ -51,6 +50,16 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def upstream_sources(longfellow_arg: Path | None,
+                     google_arg: Path | None) -> tuple[Path, Path]:
+    longfellow = longfellow_arg or Path(
+        os.environ.get("SD_JWT_ZK_LONGFELLOW_SOURCE", WORKSPACE / "longfellow-zk"))
+    google = google_arg or Path(
+        os.environ.get("SD_JWT_ZK_GOOGLE_LONGFELLOW_SOURCE",
+                       longfellow / "vendor" / "longfellow-zk"))
+    return longfellow.resolve(), google.resolve()
+
+
 def audit_matrix() -> None:
     matrix = json.loads(MATRIX.read_text(encoding="utf-8"))
     require(matrix["schemaVersion"] == 1, "unexpected ownership matrix schema")
@@ -64,10 +73,12 @@ def audit_matrix() -> None:
             "ECDSA installed-target precedent disappeared")
 
 
-def audit_upstream_ownership() -> None:
+def audit_upstream_ownership(longfellow: Path, google_source: Path) -> None:
     for header in NATIVE_HEADERS:
-        european = LONGFELLOW / "src" / "merkle" / header
-        google = GOOGLE / "lib" / "merkle" / header
+        european = longfellow / "src" / "merkle" / header
+        google = google_source / "lib" / "merkle" / header
+        require(european.is_file(), f"Longfellow source header is missing: {european}")
+        require(google.is_file(), f"Google baseline header is missing: {google}")
         current = european.read_text(encoding="utf-8")
         baseline = google.read_text(encoding="utf-8")
         if header == "merkle_tree.h" and current != baseline:
@@ -81,19 +92,28 @@ def audit_upstream_ownership() -> None:
                                          "    /*scope for TREE */ {")
             normalized = normalized.replace("      // read the proof\n      for",
                                             "      // read the proof\n      size_t sz = 0;\n      for")
-            normalized = re.sub(
-                r"\n    // The compressed proof has a unique traversal encoding\.  Consuming only a\n"
-                r"    // prefix would accept a second, trailing-node encoding of the same\n"
-                r"    // opening, which disagrees with the pinned Rust verifier\.\n"
-                r"    if \(sz != proof_len\) \{\n      return false;\n    \}\n",
-                "", normalized)
+            approved_guard = (
+                "    }\n\n"
+                "    // The compressed proof has a unique traversal encoding.  Consuming only a\n"
+                "    // prefix would accept a second, trailing-node encoding of the same\n"
+                "    // opening, which disagrees with the pinned Rust verifier.\n"
+                "    if (sz != proof_len) {\n"
+                "      return false;\n"
+                "    }\n")
+            baseline_guard = (
+                "      // Ensure entire proof is consumed.\n"
+                "      if (sz != proof_len) return false;\n"
+                "    }\n")
+            require(approved_guard in normalized,
+                    "approved trailing-proof hardening changed unexpectedly")
+            normalized = normalized.replace(approved_guard, baseline_guard, 1)
             current = normalized
         require(current == baseline, f"native Merkle header changed: {header}")
     required = (
-        LONGFELLOW / "src/circuits/merkle/fixed_depth_sha256_merkle_membership.h",
-        LONGFELLOW / "src/circuits/sha/flatsha256_circuit.h",
-        LONGFELLOW / "src/circuits/logic/bit_plucker.h",
-        LONGFELLOW / "test/merkle/canonical_merkle_membership_vectors.json",
+        longfellow / "src/circuits/merkle/fixed_depth_sha256_merkle_membership.h",
+        longfellow / "src/circuits/sha/flatsha256_circuit.h",
+        longfellow / "src/circuits/logic/bit_plucker.h",
+        longfellow / "test/merkle/canonical_merkle_membership_vectors.json",
     )
     require(all(path.is_file() for path in required), "Longfellow Merkle surface is incomplete")
 
@@ -114,6 +134,7 @@ def audit_sdjwt_sources() -> None:
     require("google-longfellow-zk" not in all_text and "/lib/merkle/" not in all_text,
             "SD-JWT contains a Google source-tree dependency")
     vector_files = [path for path in SDJWT.rglob("*") if path.is_file() and
+                    ".deps" not in path.relative_to(SDJWT).parts and
                     re.search(r"merkle.*vector|vector.*merkle", path.name, re.I)]
     require(not vector_files, "SD-JWT maintains a divergent Merkle vector corpus")
 
@@ -126,7 +147,7 @@ def audit_repository_wide_status_ownership() -> None:
     old, forbidden pattern: status code that both constructs a Merkle path and
     builds its per-level hash/witness advice itself.
     """
-    ignored = {"build", ".git", ".longfellow-install", "__pycache__"}
+    ignored = {"build", ".deps", ".git", ".longfellow-install", "__pycache__"}
     candidates = [path for path in SDJWT.rglob("*") if path.is_file() and
                   not any(part in ignored or part.startswith("build")
                           for part in path.relative_to(SDJWT).parts)]
@@ -169,9 +190,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--install-prefix", type=Path,
                         default=WORKSPACE / ".longfellow-install")
+    parser.add_argument("--longfellow-source", type=Path)
+    parser.add_argument("--google-longfellow-source", type=Path)
     args = parser.parse_args()
+    longfellow, google_source = upstream_sources(
+        args.longfellow_source, args.google_longfellow_source)
     audit_matrix()
-    audit_upstream_ownership()
+    audit_upstream_ownership(longfellow, google_source)
     audit_sdjwt_sources()
     audit_repository_wide_status_ownership()
     audit_cmake_and_install(args.install_prefix)

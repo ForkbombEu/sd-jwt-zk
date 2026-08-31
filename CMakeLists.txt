@@ -15,7 +15,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 cmake_minimum_required(VERSION 3.20)
-project(SDJWTZK VERSION 0.1.0 LANGUAGES CXX)
+set(SD_JWT_ZK_VERSION "1.0.0" CACHE STRING
+  "SD-JWT ZK semantic version used for packages and releases")
+project(SDJWTZK VERSION "${SD_JWT_ZK_VERSION}" LANGUAGES CXX)
 
 set(SD_JWT_ZK_LICENSE "GPL-3.0-or-later")
 
@@ -119,7 +121,7 @@ set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
 set(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
-  "/[.]git/" "/[.]gestalt/" "/build[^/]*/" "/node_modules/"
+  "/[.]git/" "/[.]gestalt/" "/[.]deps/" "/build[^/]*/" "/node_modules/"
   "/docs/[.]vitepress/(dist|cache)/" "/sd-jwt-zk-.*-(proof-)?result[.]txt$"
   "~$" "[.]pyc$")
 include(CPack)
@@ -168,6 +170,9 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME sd-jwt-zk-merkle-ownership-audit
     COMMAND ${_sd_jwt_zk_merkle_audit})
+  add_test(NAME sd-jwt-zk-merkle-ownership-audit-regression
+    COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_merkle_ownership_audit.py)
   if(SD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS)
     add_executable(sd-jwt-zk-full-disclosure-32-compile tests/cpp/full_disclosure_32_compile.cc)
     target_link_libraries(sd-jwt-zk-full-disclosure-32-compile PRIVATE SDJWTZK::sd-jwt-zk)
@@ -332,10 +337,37 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME sd-jwt-zk-holder-bound-api-real-proof
       COMMAND sd-jwt-zk-holder-bound-api-real-proof)
+
+    set(SD_JWT_ZK_BENCHMARK_OUTPUT_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/benchmarks" CACHE PATH
+      "Directory for reusable benchmark CSV, JSON, and Markdown reports")
+    set(SD_JWT_ZK_BENCHMARK_ITERATIONS "2" CACHE STRING
+      "Number of real prove/verify rounds per benchmark family")
+    add_custom_target(benchmark
+      COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_benchmarks.py
+        --flat-bearer $<TARGET_FILE:sd-jwt-zk-flat-bearer-proof-roundtrip>
+        --holder-bound $<TARGET_FILE:sd-jwt-zk-holder-bound-api-real-proof>
+        --status-membership $<TARGET_FILE:sd-jwt-zk-status-membership-real-proof>
+        --output-dir ${SD_JWT_ZK_BENCHMARK_OUTPUT_DIR}
+        --iterations ${SD_JWT_ZK_BENCHMARK_ITERATIONS}
+        --version ${PROJECT_VERSION}
+        --source-dir ${CMAKE_CURRENT_SOURCE_DIR}
+      DEPENDS
+        sd-jwt-zk-flat-bearer-proof-roundtrip
+        sd-jwt-zk-holder-bound-api-real-proof
+        sd-jwt-zk-status-membership-real-proof
+      BYPRODUCTS
+        ${SD_JWT_ZK_BENCHMARK_OUTPUT_DIR}/sd-jwt-zk-benchmarks.csv
+        ${SD_JWT_ZK_BENCHMARK_OUTPUT_DIR}/sd-jwt-zk-benchmarks.json
+        ${SD_JWT_ZK_BENCHMARK_OUTPUT_DIR}/sd-jwt-zk-benchmarks.md
+      USES_TERMINAL VERBATIM)
   endif()
   add_test(NAME sd-jwt-zk-cli-help COMMAND sd-jwt-zk-cli --help)
   add_test(NAME sd-jwt-zk-fixtures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fixtures.py)
   add_test(NAME sd-jwt-zk-documentation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_documentation.py)
+  add_test(NAME sd-jwt-zk-benchmark-runner
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_benchmarks.py)
   add_test(NAME sd-jwt-zk-release-policy
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_policy.py)
   add_test(NAME sd-jwt-zk-release-assurance

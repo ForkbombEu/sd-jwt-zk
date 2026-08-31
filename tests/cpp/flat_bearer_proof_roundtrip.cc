@@ -276,6 +276,11 @@ int main() {
     require(expect_reject(trailing, request, 150),
             "trailing proof bytes accepted");
 
+    require(envelope.value->proof.size() >= 4 + presentation_size + 32,
+            "composite proof framing is truncated");
+    const std::size_t status_proof_size =
+        envelope.value->proof.size() - 4 - presentation_size - 32;
+
     result << "production-real-randomized-proof-accepted\n"
            << "repeated-proof-bytes-differ\n"
            << "authenticated-disclosure-mutation-rejected\n"
@@ -295,6 +300,8 @@ int main() {
            << milliseconds(rerandomize_start, rerandomize_end) << '\n'
            << "verify-ms=" << milliseconds(verify_start, verify_end) << '\n'
            << "proof-bytes=" << envelope.value->proof.size() << '\n'
+           << "presentation-proof-bytes=" << presentation_size << '\n'
+           << "status-proof-bytes=" << status_proof_size << '\n'
            << "public-inputs=" << sd_jwt_zk::kFlatBearerPublicInputsV1
            << '\n'
            << "total-inputs=" << sd_jwt_zk::kFlatBearerDenseInputsV1
