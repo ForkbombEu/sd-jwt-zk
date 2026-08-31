@@ -1,5 +1,23 @@
+# Copyright (C) 2026 by The Forkbomb Company
+# designed, written and maintained by Denis Roio
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 cmake_minimum_required(VERSION 3.20)
 project(SDJWTZK VERSION 0.1.0 LANGUAGES CXX)
+
+set(SD_JWT_ZK_LICENSE "GPL-3.0-or-later")
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -52,7 +70,23 @@ install(TARGETS sd-jwt-zk sd-jwt-zk-cli EXPORT SDJWTZKTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+set(SD_JWT_ZK_PUBLIC_HEADERS
+  include/sd_jwt_zk/api.h
+  include/sd_jwt_zk/flat_bearer_proof.h
+  include/sd_jwt_zk/flat_disclosure_relation.h
+  include/sd_jwt_zk/holder_bound_proof.h
+  include/sd_jwt_zk/holder_credential_witness.h
+  include/sd_jwt_zk/holder_dense_layout.h
+  include/sd_jwt_zk/holder_kb_witness.h
+  include/sd_jwt_zk/issuer_jws_relation.h
+  include/sd_jwt_zk/p256_coordinate_relation.h
+  include/sd_jwt_zk/presentation.h
+  include/sd_jwt_zk/restricted_base64url_relation.h
+  include/sd_jwt_zk/restricted_json_relation.h
+  include/sd_jwt_zk/status_membership.h
+  include/sd_jwt_zk/status_private_bridge.h)
+install(FILES ${SD_JWT_ZK_PUBLIC_HEADERS}
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/sd_jwt_zk)
 install(EXPORT SDJWTZKTargets FILE SDJWTZKTargets.cmake NAMESPACE SDJWTZK::
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SDJWTZK)
 configure_package_config_file(cmake/SDJWTZKConfig.cmake.in
@@ -63,19 +97,31 @@ write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/SDJWTZKConfigVersio
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/SDJWTZKConfig.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/SDJWTZKConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SDJWTZK)
-install(FILES README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK)
-install(DIRECTORY docs/ spec/ DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK
-  FILES_MATCHING PATTERN "*.md" PATTERN "reference-lock.json"
-  PATTERN ".vitepress" EXCLUDE)
+install(FILES README.md LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK)
+install(DIRECTORY docs/ DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK/docs
+  FILES_MATCHING PATTERN "*.md" PATTERN ".vitepress" EXCLUDE)
+install(FILES spec/compatibility.md spec/local-status-v1.md
+  spec/protocol-sequences.md spec/references.md spec/sd-jwt-zk-v1.md
+  spec/reference-lock.json DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK/spec)
 install(FILES fixtures/compact-vectors.json
   DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK/vectors)
+install(FILES spec/reduced-binding-matrix.json
+  spec/reduced-release-resources.json
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK/spec)
 
 set(CPACK_PACKAGE_NAME "sd-jwt-zk")
 set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+  "Bounded SD-JWT zero-knowledge presentation proofs")
+set(CPACK_PACKAGE_VENDOR "The Forkbomb Company")
+set(CPACK_PACKAGE_CONTACT "info@forkbomb.eu")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
 set(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_SOURCE_IGNORE_FILES
   "/[.]git/" "/[.]gestalt/" "/build[^/]*/" "/node_modules/"
-  "/docs/[.]vitepress/(dist|cache)/" "~$" "[.]pyc$")
+  "/docs/[.]vitepress/(dist|cache)/" "/sd-jwt-zk-.*-(proof-)?result[.]txt$"
+  "~$" "[.]pyc$")
 include(CPack)
 
 if(BUILD_TESTING)
@@ -85,6 +131,11 @@ if(BUILD_TESTING)
   target_link_libraries(sd-jwt-zk-tests PRIVATE SDJWTZK::sd-jwt-zk)
   target_compile_definitions(sd-jwt-zk-tests PRIVATE SD_JWT_ZK_TESTDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/cpp/testdata")
   add_test(NAME sd-jwt-zk-tests COMMAND sd-jwt-zk-tests)
+  add_executable(sd-jwt-zk-reduced-parser-harness
+    tests/cpp/reduced_parser_harness.cc)
+  target_link_libraries(sd-jwt-zk-reduced-parser-harness PRIVATE SDJWTZK::sd-jwt-zk)
+  add_test(NAME sd-jwt-zk-reduced-parser-harness
+    COMMAND sd-jwt-zk-reduced-parser-harness)
   add_executable(sd-jwt-zk-presentation-api tests/cpp/presentation_api_test.cc)
   target_link_libraries(sd-jwt-zk-presentation-api PRIVATE SDJWTZK::sd-jwt-zk)
   add_test(NAME sd-jwt-zk-presentation-api COMMAND sd-jwt-zk-presentation-api)
@@ -164,6 +215,15 @@ if(BUILD_TESTING)
       PRIVATE SDJWTZK::sd-jwt-zk)
     add_test(NAME sd-jwt-zk-flat-bearer-proof-roundtrip
       COMMAND sd-jwt-zk-flat-bearer-proof-roundtrip)
+    add_executable(sd-jwt-zk-holder-cli-fixture-gen
+      tests/cpp/holder_cli_fixture_gen.cc)
+    target_link_libraries(sd-jwt-zk-holder-cli-fixture-gen
+      PRIVATE SDJWTZK::sd-jwt-zk)
+    add_test(NAME sd-jwt-zk-holder-cli-e2e
+      COMMAND ${CMAKE_COMMAND} -E env
+        SD_JWT_ZK_CLI=$<TARGET_FILE:sd-jwt-zk-cli>
+        SD_JWT_ZK_HOLDER_FIXTURE_GEN=$<TARGET_FILE:sd-jwt-zk-holder-cli-fixture-gen>
+        ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.py)
     add_executable(sd-jwt-zk-holder-two-proof-mac-bridge
       tests/cpp/holder_two_proof_mac_bridge.cc)
     target_link_libraries(sd-jwt-zk-holder-two-proof-mac-bridge
@@ -278,4 +338,6 @@ if(BUILD_TESTING)
   add_test(NAME sd-jwt-zk-documentation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_documentation.py)
   add_test(NAME sd-jwt-zk-release-policy
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_policy.py)
+  add_test(NAME sd-jwt-zk-release-assurance
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_assurance.py)
 endif()

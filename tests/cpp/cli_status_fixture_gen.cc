@@ -1,23 +1,45 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <fstream>
 #include <string>
 #include <vector>
 
 #include "sd_jwt_zk/flat_bearer_proof.h"
+#include "nested_es256_fixture.h"
 
 namespace {
 constexpr char kHeader[] = "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ";
-constexpr char kPayload[] = "eyJfc2QiOlsiRUtEMklOR1JlWkZtQXQ3LXZBbmNlY2VkUVRvb3gzNTlGR1hZR2dZUUJMOCJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSJ9";
-constexpr char kSignature[] = "FQp4GsBBvr3_xbX1UtKSc7mtcw1ygaZ7Z-suRyHET3oggdcr1KqoyH-LA8Yy8pHr3xGkKrrQCu-7fCAbYrTljg";
 constexpr char kDisclosure[] = "WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsInRydWUiXQ";
-constexpr char kX[] = "Jl-RmGfWH_k-UmeHbUnLL58NFLxBz6qOzZqP7z_qxY4";
-constexpr char kY[] = "VBuaEu3T_57clPlJDLwm8xnw1PHFyR4kbXUHyGsK9TU";
+constexpr char kArrayDisclosure[] = "WyJhcnJheTAwMSIsIml0ZW0iXQ";
 void write(const std::string& path, const std::vector<std::uint8_t>& bytes) { std::ofstream out(path, std::ios::binary); out.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); }
 }
 int main(int argc, char** argv) {
   if (argc != 2) return 2;
   const std::string dir = argv[1];
-  const auto key = sd_jwt_zk::decode_p256_jwk(kX, kY); if (!key) return 2;
-  const std::string presentation = std::string(kHeader)+"."+kPayload+"."+kSignature+"~"+kDisclosure+"~";
+  auto digest=[](std::string_view d){auto h=sd_jwt_zk::sha256_ascii(d);return sd_jwt_zk::base64url_encode({h.begin(),h.end()});};
+  const std::string json="{\"_sd\":[\""+digest(kDisclosure)+"\"],\"items\":[{\"...\":\""+digest(kArrayDisclosure)+"\"}],\"iss\":\"https://issuer.example\",\"vct\":\"example\"}";
+  const auto payload=sd_jwt_zk::base64url_encode({json.begin(),json.end()});
+  const std::string signing=std::string(kHeader)+"."+payload;
+  std::array<unsigned char,64> raw{};sd_jwt_zk::P256Key public_key{};
+  if(!sd_jwt_zk::test::sign_nested_fixture_es256(signing,raw,&public_key))return 2;
+  const auto key=sd_jwt_zk::Result<sd_jwt_zk::P256Key>::ok(public_key);
+  const std::string presentation = signing+"."+sd_jwt_zk::base64url_encode({raw.begin(),raw.end()})+"~"+kDisclosure+"~"+kArrayDisclosure+"~";
   const auto witness = sd_jwt_zk::flat_bearer_witness_from_presentation(presentation, *key.value); if (!witness) return 2;
   const auto binding = sd_jwt_zk::status_credential_binding_v1(witness.value->signing_digest);
   std::vector<sd_jwt_zk::LocalStatusEntryV1> entries(4);

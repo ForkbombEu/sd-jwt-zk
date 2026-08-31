@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <array>
@@ -20,7 +38,14 @@ template<class T> struct Result {
 };
 
 using Bytes = std::vector<std::uint8_t>;
-struct Limits { std::size_t max_input = 65536; std::size_t max_field = 4096; std::size_t max_proof = 1048576; };
+struct Limits {
+  std::size_t max_input = 65536;
+  std::size_t max_field = 4096;
+  std::size_t max_proof = 1048576;
+  // The shipped relation has exactly one root-object and one root-array slot.
+  // Count the separators before allocating disclosure strings.
+  std::size_t disclosure_count = 2;
+};
 enum class Binding : std::uint8_t { bearer = 1, holder_bound = 2 };
 enum class Trust : std::uint8_t { exact_key = 1 };
 struct CircuitIdentity { Binding binding; Trust trust; std::uint32_t capacity; std::array<std::uint8_t, 32> circuit_digest{}; std::string field; std::uint16_t ligero_rate{}; std::uint16_t query_count{}; };
@@ -133,6 +158,7 @@ bool native_parsing_is_not_proof_verification();
 
 struct RestrictedIssuerPayload {
   std::string digest;
+  std::string array_digest;
   std::string issuer;
   std::string vct;
   bool explicit_sha256{};

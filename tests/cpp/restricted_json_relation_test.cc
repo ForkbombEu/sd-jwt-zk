@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/restricted_base64url_relation.h"
 #include "sd_jwt_zk/flat_disclosure_relation.h"
 #include "sd_jwt_zk/restricted_json_relation.h"
@@ -278,7 +296,8 @@ bool accepts_cnf_jwk(std::string jwk, const sd_jwt_zk::P256Key& key) {
 
 
 std::string payload(std::string digest, std::string issuer, std::string vct, bool explicit_sha256) {
-  return "{\"_sd\":[\"" + std::move(digest) + "\"],\"iss\":\"" + std::move(issuer) +
+  return "{\"_sd\":[\"" + std::move(digest) +
+      "\"],\"items\":[{\"...\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}],\"iss\":\"" + std::move(issuer) +
       "\",\"vct\":\"" + std::move(vct) + "\"" +
       (explicit_sha256 ? ",\"_sd_alg\":\"sha-256\"}" : "}");
 }
@@ -323,7 +342,7 @@ int main() {
   if (accepts(bad_delimiter, 1, 1, false, bad_delimiter.size())) return 3;
   auto bad_digest = omitted; bad_digest[9] = '!';
   if (accepts(bad_digest, 1, 1, false, bad_digest.size())) return 4;
-  auto escaped_issuer = omitted; escaped_issuer[62] = '\\';
+  auto escaped_issuer = omitted; escaped_issuer[126] = '\\';
   if (accepts(escaped_issuer, 1, 1, false, escaped_issuer.size())) return 5;
   auto trailing = omitted + "x";
   if (accepts(trailing, 1, 1, false, trailing.size())) return 6;

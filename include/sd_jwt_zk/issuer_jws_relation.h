@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <array>
@@ -193,9 +211,9 @@ class IssuerJwsRelation {
     RestrictedJsonRelation<LogicCircuit, PaddedPayloadChars, IndexBits> json(logic_);
     typename LogicCircuit::template bitvec<IndexBits> start{};
     for (std::size_t bit = 0; bit < start.size(); ++bit) start[bit] = logic_.bit(0);
-    // Canonical restricted JSON has vct bytes at 71 + issuer_length.  The
+    // Canonical restricted JSON has vct bytes at 135 + issuer_length.  The
     // low-level add is constrained field arithmetic, not a host offset.
-    start = logic_.vadd(in.issuer_length, 71 + byte_index);
+    start = logic_.vadd(in.issuer_length, 135 + byte_index);
     return json.routed_first(in.payload_padded, start);
   }
 

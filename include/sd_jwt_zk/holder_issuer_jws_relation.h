@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <array>
@@ -73,8 +91,6 @@ class HolderIssuerJwsRelation {
       logic_.assert_implies(active,
           logic_.veq(compact[HeaderChars + 1 + i], in.payload_b64[i]));
     }
-    auto signature_at9 =
-        logic_.vadd(in.payload_b64_length, HeaderChars + 1);
     auto bind_suffix = [&](const auto& signature_at) {
       std::array<v8, 87> suffix{};
       routing_.shift(signature_at, suffix.size(), suffix.data(), compact.size(),
@@ -86,13 +102,16 @@ class HolderIssuerJwsRelation {
       logic_.vassert_eq(compact_length, expected_length);
     };
     if constexpr (LengthBits == 9) {
+      auto signature_at9 =
+          logic_.vadd(in.payload_b64_length, HeaderChars + 1);
       bind_suffix(signature_at9);
     } else {
       static_assert(LengthBits == 10,
                     "holder compact length supports 9- or 10-bit buckets");
       typename LogicCircuit::template bitvec<1> high{};
       high[0] = logic_.bit(0);
-      bind_suffix(logic_.vappend(signature_at9, high));
+      const auto payload_length10 = logic_.vappend(in.payload_b64_length, high);
+      bind_suffix(logic_.vadd(payload_length10, HeaderChars + 1));
     }
     for (std::size_t i = 0; i < CompactChars; ++i)
       logic_.assert_implies(logic_.lnot(logic_.vlt(i, compact_length)),
@@ -105,12 +124,14 @@ class HolderIssuerJwsRelation {
   void assert_holder_json(const Input& in, const EltW& holder_x,
                           const EltW& holder_y) const {
     constexpr char prefix[] = "{\"_sd\":[\"";
-    constexpr char digest_to_issuer[] = "\"],\"iss\":\"";
+    constexpr char digest_to_array[] = "\"],\"items\":[{\"...\":\"";
+    constexpr char array_to_issuer[] = "\"}],\"iss\":\"";
     constexpr char issuer_to_vct[] = "\",\"vct\":\"";
     constexpr char cnf_prefix[] = "\",\"cnf\":{\"jwk\":";
     constexpr char algorithm[] = ",\"_sd_alg\":\"sha-256\"}";
     static_assert(sizeof(prefix) - 1 == 9);
-    static_assert(sizeof(digest_to_issuer) - 1 == 10);
+    static_assert(sizeof(digest_to_array) - 1 == 20);
+    static_assert(sizeof(array_to_issuer) - 1 == 11);
     static_assert(sizeof(issuer_to_vct) - 1 == 9);
     static_assert(sizeof(cnf_prefix) - 1 == 15);
 
@@ -121,29 +142,37 @@ class HolderIssuerJwsRelation {
       RestrictedBase64UrlRelation<LogicCircuit>(logic_).decode_char(
           in.payload_padded[9 + i], sextet);
     }
-    for (std::size_t i = 0; i < sizeof(digest_to_issuer) - 1; ++i)
+    for (std::size_t i = 0; i < sizeof(digest_to_array) - 1; ++i)
       logic_.vassert_eq(in.payload_padded[52 + i],
-                         static_cast<unsigned char>(digest_to_issuer[i]));
+                         static_cast<unsigned char>(digest_to_array[i]));
+    for (std::size_t i = 0; i < 43; ++i) {
+      typename LogicCircuit::template bitvec<6> sextet{};
+      RestrictedBase64UrlRelation<LogicCircuit>(logic_).decode_char(
+          in.payload_padded[72 + i], sextet);
+    }
+    for (std::size_t i = 0; i < sizeof(array_to_issuer) - 1; ++i)
+      logic_.vassert_eq(in.payload_padded[115 + i],
+                        static_cast<unsigned char>(array_to_issuer[i]));
 
     typename LogicCircuit::BitW selected = logic_.bit(0);
     std::array<v8, kJwkChars> jwk{};
     auto jwk_at = logic_.vadd(in.issuer_length, in.vct_length);
-    jwk_at = logic_.vadd(jwk_at, 86);
+    jwk_at = logic_.vadd(jwk_at, 150);
     routing_.shift(jwk_at, jwk.size(), jwk.data(), in.payload_padded.size(),
                    in.payload_padded.data(), logic_.template vbit<8>(0), 3);
     for (std::size_t issuer = 1; issuer <= IssuerMax; ++issuer) {
       const auto issuer_branch = logic_.veq(in.issuer_length, issuer);
       for (std::size_t i = 0; i < sizeof(issuer_to_vct) - 1; ++i)
         logic_.assert_implies(issuer_branch,
-            logic_.veq(in.payload_padded[62 + issuer + i],
+            logic_.veq(in.payload_padded[126 + issuer + i],
                        static_cast<unsigned char>(issuer_to_vct[i])));
       for (std::size_t vct = 1; vct <= VctMax; ++vct) {
         const auto branch = logic_.land(issuer_branch,
                                         logic_.veq(in.vct_length, vct));
         selected = logic_.lor_exclusive(selected, branch);
-        for (std::size_t i = 0; i < issuer; ++i) safe(branch, in.payload_padded[62 + i]);
-        for (std::size_t i = 0; i < vct; ++i) safe(branch, in.payload_padded[71 + issuer + i]);
-        const std::size_t cnf_at = 71 + issuer + vct;
+        for (std::size_t i = 0; i < issuer; ++i) safe(branch, in.payload_padded[126 + i]);
+        for (std::size_t i = 0; i < vct; ++i) safe(branch, in.payload_padded[135 + issuer + i]);
+        const std::size_t cnf_at = 135 + issuer + vct;
         for (std::size_t i = 0; i < sizeof(cnf_prefix) - 1; ++i)
           logic_.assert_implies(branch,
               logic_.veq(in.payload_padded[cnf_at + i],

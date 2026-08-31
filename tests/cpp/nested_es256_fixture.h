@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <array>
@@ -19,14 +37,16 @@ inline constexpr char kNestedFixturePrivateScalar[] =
 
 inline bool sign_nested_fixture_es256(std::string_view signing_input,
                                       std::array<unsigned char, 64>& raw,
-                                      P256Key* public_key = nullptr) {
+                                      P256Key* public_key = nullptr,
+                                      const char* private_scalar =
+                                          kNestedFixturePrivateScalar) {
   using Key = std::unique_ptr<EC_KEY, decltype(&EC_KEY_free)>;
   using Number = std::unique_ptr<BIGNUM, decltype(&BN_free)>;
   using Point = std::unique_ptr<EC_POINT, decltype(&EC_POINT_free)>;
   using Signature = std::unique_ptr<ECDSA_SIG, decltype(&ECDSA_SIG_free)>;
   Key key(EC_KEY_new_by_curve_name(NID_X9_62_prime256v1), EC_KEY_free);
   BIGNUM* scalar_raw = nullptr;
-  if (!key || BN_hex2bn(&scalar_raw, kNestedFixturePrivateScalar) == 0)
+  if (!key || BN_hex2bn(&scalar_raw, private_scalar) == 0)
     return false;
   Number scalar(scalar_raw, BN_free);
   if (EC_KEY_set_private_key(key.get(), scalar.get()) != 1)

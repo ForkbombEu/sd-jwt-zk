@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/restricted_base64url_relation.h"
 #include "sd_jwt_zk/restricted_json_relation.h"
 #include "sd_jwt_zk/issuer_jws_relation.h"
@@ -213,7 +231,7 @@ struct Fixture140 {
 };
 
 int main() {
-  std::ofstream stage_result("/tmp/sd-jwt-zk-issuer-stage-result.txt");
+  std::ofstream stage_result("sd-jwt-zk-issuer-stage-result.txt");
   stage_result << "stage=started\n";
   const proofs::Fp256Base field;
   proofs::EvaluationBackend<proofs::Fp256Base> backend(field, false);

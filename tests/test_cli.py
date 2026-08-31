@@ -1,3 +1,19 @@
+# Copyright (C) 2026 by The Forkbomb Company
+# designed, written and maintained by Denis Roio
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import os
 import subprocess
 import tempfile
@@ -6,6 +22,7 @@ from pathlib import Path
 
 
 CLI = Path(os.environ["SD_JWT_ZK_CLI"])
+HOLDER_FIXTURE_GEN = os.environ.get("SD_JWT_ZK_HOLDER_FIXTURE_GEN")
 
 
 class CliTests(unittest.TestCase):
@@ -71,6 +88,35 @@ class CliTests(unittest.TestCase):
             source.write_bytes(b"public")
             source.chmod(0o644)
             self.assertEqual(self.run_cli("inspect", "--input", str(source)).returncode, 2)
+
+    def test_one_over_cli_file_limit_rejects_before_decode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "oversized"
+            with source.open("wb") as stream:
+                stream.truncate(6 * 1024 * 1024 + 1)
+            source.chmod(0o600)
+            self.assertEqual(self.run_cli("inspect", "--input", str(source)).returncode, 2)
+
+    @unittest.skipUnless(HOLDER_FIXTURE_GEN, "expensive holder CLI fixture unavailable")
+    def test_holder_prove_and_verify_with_two_disclosures_and_kb_jwt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            generated = subprocess.run([HOLDER_FIXTURE_GEN, root], text=True,
+                                       capture_output=True)
+            self.assertEqual(generated.returncode, 0, generated.stderr)
+            for name in ("issuer.hex", "presentation", "challenge"):
+                (root / name).chmod(0o600)
+            proof, nonce_store = root / "proof", root / "nonces"
+            proved = self.run_cli(
+                "prove", "--mode", "holder", "--challenge", str(root / "challenge"),
+                "--presentation-file", str(root / "presentation"),
+                "--issuer-key-file", str(root / "issuer.hex"), "--out", str(proof))
+            self.assertEqual(proved.returncode, 0, proved.stderr)
+            verified = self.run_cli(
+                "verify", "--mode", "holder", "--challenge", str(root / "challenge"),
+                "--proof-file", str(proof), "--nonce-store", str(nonce_store),
+                "--now", "1777334400")
+            self.assertEqual(verified.returncode, 0, verified.stderr)
 
 
 if __name__ == "__main__":

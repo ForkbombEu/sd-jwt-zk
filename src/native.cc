@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/api.h"
 #include <algorithm>
 #include <openssl/core_names.h>
@@ -51,6 +69,32 @@ bool verify_es256_signature(const P256Key& key, std::string_view input,
   return ok;
 }
 SecretBytes::SecretBytes(Bytes b):bytes_(std::move(b)){} SecretBytes::~SecretBytes(){volatile std::uint8_t* p=bytes_.data();for(size_t i=0;i<bytes_.size();++i)p[i]=0;} SecretBytes::SecretBytes(SecretBytes&&o)noexcept:bytes_(std::move(o.bytes_)){} SecretBytes& SecretBytes::operator=(SecretBytes&&o)noexcept{if(this!=&o){volatile std::uint8_t* p=bytes_.data();for(size_t i=0;i<bytes_.size();++i)p[i]=0;bytes_=std::move(o.bytes_);}return *this;} const Bytes& SecretBytes::view()const{return bytes_;}
-Result<NativeWitness> build_native_witness(std::string_view p,const Limits&l){if(p.empty()||p.size()>l.max_input||!ascii(p))return Result<NativeWitness>::fail(ErrorCode::secret,"credential syntax rejected");std::vector<std::string_view> parts;size_t start=0;while(start<=p.size()){auto e=p.find('~',start);parts.push_back(p.substr(start,e==std::string_view::npos?p.size()-start:e-start));if(e==std::string_view::npos)break;start=e+1;}if(!parts.empty()&&parts.back().empty())parts.pop_back();if(parts.size()<2||parts.front().empty())return Result<NativeWitness>::fail(ErrorCode::secret,"presentation syntax rejected");auto issuer=split_compact_jws(parts.front(),l);if(!issuer)return Result<NativeWitness>::fail(ErrorCode::secret,"issuer JWS rejected");NativeWitness out{*issuer.value,{},{}};for(size_t i=1;i<parts.size();++i){if(parts[i].empty())return Result<NativeWitness>::fail(ErrorCode::secret,"empty disclosure rejected");auto d=base64url_decode(parts[i],l.max_field);if(!d)return Result<NativeWitness>::fail(ErrorCode::secret,"disclosure rejected");out.disclosures.emplace_back(parts[i]);}return Result<NativeWitness>::ok(std::move(out));}
+Result<NativeWitness> build_native_witness(std::string_view p,const Limits&l){
+  if(p.empty()||p.size()>l.max_input||!ascii(p)||l.disclosure_count!=2)
+    return Result<NativeWitness>::fail(ErrorCode::secret,"credential syntax rejected");
+  const auto separators=static_cast<std::size_t>(std::count(p.begin(),p.end(),'~'));
+  const bool terminal=p.back()=='~';
+  if(separators!=l.disclosure_count+1U)
+    return Result<NativeWitness>::fail(ErrorCode::secret,"presentation requires exactly two disclosures");
+  std::vector<std::string_view> parts;
+  parts.reserve(l.disclosure_count+2);
+  size_t start=0;
+  while(start<p.size()){
+    auto e=p.find('~',start);
+    parts.push_back(p.substr(start,e==std::string_view::npos?p.size()-start:e-start));
+    if(e==std::string_view::npos)break;
+    start=e+1;
+  }
+  const auto expected_parts=l.disclosure_count+1U+(terminal?0U:1U);
+  if(parts.size()!=expected_parts||parts.front().empty())
+    return Result<NativeWitness>::fail(ErrorCode::secret,"presentation syntax rejected");
+  auto issuer=split_compact_jws(parts.front(),l);
+  if(!issuer)return Result<NativeWitness>::fail(ErrorCode::secret,"issuer JWS rejected");
+  NativeWitness out{*issuer.value,{},{}};
+  out.disclosures.reserve(l.disclosure_count);
+  for(size_t i=1;i<=l.disclosure_count;++i){if(parts[i].empty())return Result<NativeWitness>::fail(ErrorCode::secret,"empty disclosure rejected");auto d=base64url_decode(parts[i],l.max_field);if(!d)return Result<NativeWitness>::fail(ErrorCode::secret,"disclosure rejected");out.disclosures.emplace_back(parts[i]);}
+  if(!terminal){auto kb=split_compact_jws(parts.back(),l);if(!kb)return Result<NativeWitness>::fail(ErrorCode::secret,"KB-JWT rejected");out.kb_jwt=std::move(*kb.value);}
+  return Result<NativeWitness>::ok(std::move(out));
+}
 bool native_parsing_is_not_proof_verification(){return true;}
 } // namespace sd_jwt_zk

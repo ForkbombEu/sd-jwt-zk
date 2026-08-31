@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <cstddef>
@@ -15,13 +33,24 @@ namespace sd_jwt_zk {
 // strings are UTF-8; number text retains its RFC 8259 spelling so a circuit
 // can compare the same bounded byte range before applying a typed policy.
 enum class JsonKind : std::uint8_t { null_value, boolean, number, string, array, object };
+struct JsonMember;
 struct JsonValue {
   JsonKind kind{};
   std::size_t begin{};
   std::size_t end{};
   std::string scalar;
   std::vector<JsonValue> elements;
-  std::vector<std::pair<std::string, JsonValue>> members;
+  // A named node avoids instantiating std::pair with an incomplete JsonValue,
+  // which is rejected by Clang with libstdc++ even though GCC accepted it.
+  std::vector<JsonMember> members;
+};
+
+struct JsonMember {
+  std::string first;
+  JsonValue second;
+
+  JsonMember(std::string name, JsonValue value)
+      : first(std::move(name)), second(std::move(value)) {}
 };
 
 struct JsonLimits {

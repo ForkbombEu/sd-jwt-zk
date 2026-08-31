@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <atomic>
 #include <iostream>
 #include <stdexcept>
@@ -7,6 +25,7 @@
 
 #include "merkle/merkle_tree.h"
 #include "sd_jwt_zk/holder_bound_proof.h"
+#include "nested_es256_fixture.h"
 
 namespace {
 
@@ -17,6 +36,7 @@ constexpr char kIssuer[] =
     "eyJfc2QiOlsiRUtEMklOR1JlWkZtQXQ3LXZBbmNlY2VkUVRvb3gzNTlGR1hZR2dZUUJMOCJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSIsImNuZiI6eyJqd2siOnsia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsIngiOiJkR1dlTzhURGpONm9DdkhKQ3VRX2gxaWEtc2dvV3dZWXVjVGVzeHlTc2hnIiwieSI6IjdJdzZfQVJGVWF0aTFwemVWdzdYQUVIVkwxcVpMVldkNGkxMzJUNGVibm8ifX19."
     "zC41XCiPUiMI38m0IrKCHoC0XmOW6I0N0Sx5QEUKKmTXNbvW0DxK_4zXPqai0K1-vi0MwVzUl835id3-znLG0w";
 constexpr char kDisclosure[] = "WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsInRydWUiXQ";
+constexpr char kArrayDisclosure[] = "WyJhcnJheTAwMSIsIml0ZW0iXQ";
 constexpr char kKbJwt[] =
     "eyJhbGciOiJFUzI1NiIsInR5cCI6ImtiK2p3dCJ9."
     "eyJhdWQiOiJodHRwczovL3ZlcmlmaWVyLmV4YW1wbGUiLCJub25jZSI6ImNoYWxsZW5nZS0wMDAxIiwiaWF0IjoxNzc3MzM0NDAwLCJzZF9oYXNoIjoiNERvQ0R1X21JR0xaUGJ3aGhqVGlzWFgteWp0eUZ5em50TjcwV0dvYncyZyJ9."
@@ -41,10 +61,53 @@ void require(bool value, const char* message) {
 
 int main() {
   try {
-    const auto issuer = sd_jwt_zk::decode_p256_jwk(kIssuerX, kIssuerY);
-    require(static_cast<bool>(issuer), "issuer key fixture rejected");
-    const std::string presentation = std::string(kIssuer) + "~" +
-                                     kDisclosure + "~";
+    const auto digest_text = [](std::string_view disclosure) {
+      const auto digest = sd_jwt_zk::sha256_ascii(disclosure);
+      return sd_jwt_zk::base64url_encode(sd_jwt_zk::Bytes(digest.begin(), digest.end()));
+    };
+    constexpr char kHeader[] = "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ";
+    constexpr char kHolderScalar[] =
+        "6f1d2c3b4a59687766554433221100ffeeddccbbaa9988776655443322110099";
+    sd_jwt_zk::P256Key holder_public{};
+    std::array<unsigned char, 64> scratch{};
+    require(sd_jwt_zk::test::sign_nested_fixture_es256(
+                "holder-key", scratch, &holder_public, kHolderScalar),
+            "holder fixture key generation failed");
+    const auto x = sd_jwt_zk::base64url_encode(
+        sd_jwt_zk::Bytes(holder_public.x.begin(), holder_public.x.end()));
+    const auto y = sd_jwt_zk::base64url_encode(
+        sd_jwt_zk::Bytes(holder_public.y.begin(), holder_public.y.end()));
+    const std::string payload_json = "{\"_sd\":[\"" + digest_text(kDisclosure) +
+        "\"],\"items\":[{\"...\":\"" + digest_text(kArrayDisclosure) +
+        "\"}],\"iss\":\"https://issuer.example\",\"vct\":\"example\",\"cnf\":{\"jwk\":{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"" +
+        x + "\",\"y\":\"" + y + "\"}}}";
+    const std::string payload = sd_jwt_zk::base64url_encode(
+        sd_jwt_zk::Bytes(payload_json.begin(), payload_json.end()));
+    const std::string issuer_signing = std::string(kHeader) + "." + payload;
+    std::array<unsigned char, 64> issuer_raw{};
+    sd_jwt_zk::P256Key issuer_public{};
+    require(sd_jwt_zk::test::sign_nested_fixture_es256(
+                issuer_signing, issuer_raw, &issuer_public),
+            "issuer fixture signing failed");
+    const std::string issuer_compact = issuer_signing + "." +
+        sd_jwt_zk::base64url_encode(sd_jwt_zk::Bytes(issuer_raw.begin(), issuer_raw.end()));
+    const auto issuer = sd_jwt_zk::Result<sd_jwt_zk::P256Key>::ok(issuer_public);
+    const std::string credential_presentation = issuer_compact + "~" +
+        kDisclosure + "~" + kArrayDisclosure + "~";
+    const auto presentation_hash = sd_jwt_zk::sha256_ascii(credential_presentation);
+    const std::string kb_payload_json =
+        "{\"aud\":\"https://verifier.example\",\"nonce\":\"challenge-0001\",\"iat\":1777334400,\"sd_hash\":\"" +
+        sd_jwt_zk::base64url_encode(sd_jwt_zk::Bytes(presentation_hash.begin(), presentation_hash.end())) + "\"}";
+    constexpr char kKbHeader[] = "eyJhbGciOiJFUzI1NiIsInR5cCI6ImtiK2p3dCJ9";
+    const std::string kb_signing = std::string(kKbHeader) + "." +
+        sd_jwt_zk::base64url_encode(sd_jwt_zk::Bytes(kb_payload_json.begin(), kb_payload_json.end()));
+    std::array<unsigned char, 64> kb_raw{};
+    require(sd_jwt_zk::test::sign_nested_fixture_es256(
+                kb_signing, kb_raw, nullptr, kHolderScalar),
+            "KB fixture signing failed");
+    const std::string kb_compact = kb_signing + "." +
+        sd_jwt_zk::base64url_encode(sd_jwt_zk::Bytes(kb_raw.begin(), kb_raw.end()));
+    const std::string presentation = credential_presentation + kb_compact;
     auto credential =
         sd_jwt_zk::holder_credential_witness_from_presentation_v1(
             presentation, *issuer.value);
@@ -55,7 +118,7 @@ int main() {
     const auto holder_y = sd_jwt_zk::base64url_encode(
         sd_jwt_zk::Bytes(holder.y.begin(), holder.y.end()));
     const auto kb = sd_jwt_zk::holder_kb_witness_from_compact_jwt_v1(
-        kKbJwt, holder_x, holder_y);
+        kb_compact, holder_x, holder_y);
     require(static_cast<bool>(kb), "KB witness rejected");
 
     sd_jwt_zk::Request request{};

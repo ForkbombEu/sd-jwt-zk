@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <array>
@@ -66,7 +84,7 @@ using FlatBearerLogic = proofs::Logic<FlatBearerField, FlatBearerBackend>;
 // Status credential bindings moved behind the private-input boundary.  A
 // status-capable proof has the same public bearer prefix as a statusless one.
 inline constexpr std::size_t kFlatBearerPublicInputsV1 = 549;
-inline constexpr std::size_t kFlatBearerDenseInputsV1 = 27449;
+inline constexpr std::size_t kFlatBearerDenseInputsV1 = 33113;
 
 // Fills the exact wire order declared by BuildFlatBearerCircuitV1.  The full
 // witness begins with the compiler's constant-one input, the public statement,
@@ -124,11 +142,11 @@ template <class LogicT> struct FlatBearerCompactOpeningWireBundleV1 {
   using Sha = proofs::FlatSHA256Circuit<LogicT, proofs::BitPlucker<LogicT, 4>>;
   std::array<typename LogicT::v8, 102> header{};
   typename LogicT::template bitvec<8> header_length{};
-  std::array<typename LogicT::v8, 140> payload{};
+  std::array<typename LogicT::v8, 228> payload{};
   typename LogicT::template bitvec<8> payload_length{};
-  std::array<typename LogicT::v8, 105> decoded_payload{};
-  std::array<typename LogicT::v8, 320> sha_input{};
-  std::array<typename Sha::BlockWitness, 5> sha_witness{};
+  std::array<typename LogicT::v8, 171> decoded_payload{};
+  std::array<typename LogicT::v8, 384> sha_input{};
+  std::array<typename Sha::BlockWitness, 6> sha_witness{};
   typename LogicT::v256 digest_bits{};
   typename LogicT::v8 sha_block_count{};
 };
@@ -157,7 +175,7 @@ inline void AllocateFlatBearerRelationV1WithSource(
     std::array<typename LogicT::EltW, 32>* signing_digest_public_binding = nullptr,
     FlatBearerCompactOpeningWireBundleV1<LogicT>* compact_opening_binding = nullptr,
     bool enforce_flat_payload = true) {
-  constexpr std::size_t kSigningBlocks = 5, kHeaderChars = 102, kPayloadChars = 140;
+  constexpr std::size_t kSigningBlocks = 6, kHeaderChars = 102, kPayloadChars = 228;
   auto& allocation = allocation_source;
   std::array<typename LogicT::EltW, 32> public_statement{};
   for (auto& wire : public_statement) wire = allocation.element();
@@ -267,7 +285,7 @@ inline void AllocateFlatBearerRelationV1WithSource(
   typename Ecdsa::Witness ecdsa{}; ecdsa.input(logic);
   typename Relation::Input issuer{signing, sha_witness, digest_bits, header, header_decoded, payload, payload_decoded,
       header_b64_len, payload_b64_len, padded,
-      issuer_len, vct_len, payload_len, explicit_sha, public_x, public_y, digest, ecdsa, 4};
+      issuer_len, vct_len, payload_len, explicit_sha, public_x, public_y, digest, ecdsa, 6};
   constexpr std::size_t kDisclosureChars = 42;
   using Disclosure = FlatDisclosureRelation<LogicT, 1, kDisclosureChars>;
   using DisclosureSha = proofs::FlatSHA256Circuit<
@@ -288,6 +306,23 @@ inline void AllocateFlatBearerRelationV1WithSource(
   typename Disclosure::Input disclosure_input{
       disclosure_ascii, disclosure_sha_input, disclosure_sha_witness,
       disclosure_digest, signed_digest, 1};
+  constexpr std::size_t kArrayDisclosureChars = 26;
+  using ArrayDisclosure = FlatDisclosureRelation<LogicT, 1, kArrayDisclosureChars>;
+  std::array<typename LogicT::v8, kArrayDisclosureChars> array_disclosure_ascii{};
+  for (auto& byte : array_disclosure_ascii) byte = allocation.template value<8>();
+  std::array<typename LogicT::v8, 64> array_disclosure_sha_input{};
+  for (auto& byte : array_disclosure_sha_input) byte = allocation.template value<8>();
+  std::array<typename DisclosureSha::BlockWitness, 1> array_disclosure_sha_witness{};
+  array_disclosure_sha_witness[0].input(logic);
+  typename LogicT::v256 array_disclosure_digest{};
+  for (auto& bit : array_disclosure_digest) bit = allocation.bit();
+  std::array<typename LogicT::v8, 43> array_signed_digest{};
+  for (std::size_t i = 0; i < array_signed_digest.size(); ++i)
+    array_signed_digest[i] = payload_decoded[72 + i];
+  typename ArrayDisclosure::Input array_disclosure_input{
+      array_disclosure_ascii, array_disclosure_sha_input,
+      array_disclosure_sha_witness, array_disclosure_digest,
+      array_signed_digest, 1};
   typename LogicT::template bitvec<8> salt_len{}, name_len{}, value_len{},
       disclosure_len{};
   for (auto* index : {&salt_len, &name_len, &value_len, &disclosure_len})
@@ -324,6 +359,14 @@ inline void AllocateFlatBearerRelationV1WithSource(
   disclosure.assert_named_string_policy(
       disclosure_json, salt_len, name_len, value_len, kPolicyName,
       kPolicyValue, public_policy_result, 9);
+  ArrayDisclosure array_disclosure(logic);
+  array_disclosure.assert_digest_match(array_disclosure_input);
+  std::array<typename LogicT::v8, (kArrayDisclosureChars * 6) / 8>
+      array_disclosure_json{};
+  RestrictedBase64UrlRelation<LogicT>(logic).decode(
+      array_disclosure_ascii, array_disclosure_json);
+  array_disclosure.template assert_two_string_array<8, 4>(
+      array_disclosure_json);
 }
 
 inline void AllocateFlatBearerRelationV1(

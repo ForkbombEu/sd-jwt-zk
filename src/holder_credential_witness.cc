@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/holder_credential_witness.h"
 
 #include <algorithm>
@@ -54,7 +72,7 @@ Result<HolderCredentialWitnessV1> holder_credential_witness_from_presentation_v1
     std::string_view presentation, const P256Key& issuer_key,
     const Limits& limits) {
   const auto parsed = build_native_witness(presentation, limits);
-  if (!parsed || parsed.value->kb_jwt || parsed.value->disclosures.size() != 1)
+  if (!parsed || parsed.value->disclosures.size() != 2)
     return Result<HolderCredentialWitnessV1>::fail(
         ErrorCode::malformed, "not a bounded holder credential presentation");
   const auto payload_bytes = base64url_decode(parsed.value->issuer.payload,
@@ -78,23 +96,31 @@ Result<HolderCredentialWitnessV1> holder_credential_witness_from_presentation_v1
   FlatBearerWitness credential{
       issuer, issuer_key, *signature.value, Bytes(signing.begin(), signing.end()),
       sha256_ascii(signing), parsed.value->disclosures, {}, *payload.value};
-  for (const auto& item : credential.disclosures) {
+  const std::array<std::string_view, 2> signed_digests{
+      credential.payload.digest, credential.payload.array_digest};
+  for (std::size_t i = 0; i < credential.disclosures.size(); ++i) {
+    const auto& item = credential.disclosures[i];
     const auto digest = sha256_ascii(item);
     if (base64url_encode(Bytes(digest.begin(), digest.end())) !=
-        credential.payload.digest)
+        signed_digests[i])
       return Result<HolderCredentialWitnessV1>::fail(
           ErrorCode::malformed, "holder disclosure is not issuer-bound");
     credential.disclosure_digests.push_back(digest);
   }
   const std::string compact = issuer.protected_header + "." + issuer.payload +
                               "." + issuer.signature;
-  const std::string expected = compact + "~" +
-                               credential.disclosures.front() + "~";
-  if (expected != presentation)
+  const std::string expected = compact + "~" + credential.disclosures[0] +
+                               "~" + credential.disclosures[1] + "~";
+  const std::string kb = parsed.value->kb_jwt
+      ? parsed.value->kb_jwt->protected_header + "." +
+            parsed.value->kb_jwt->payload + "." + parsed.value->kb_jwt->signature
+      : std::string{};
+  if (parsed.value->kb_jwt ? expected + kb != presentation
+                           : expected != presentation)
     return Result<HolderCredentialWitnessV1>::fail(
         ErrorCode::noncanonical, "holder presentation is not canonical");
   HolderCredentialWitnessV1 out{std::move(credential), compact,
-                                sha256_ascii(presentation)};
+                                sha256_ascii(expected)};
   return Result<HolderCredentialWitnessV1>::ok(std::move(out));
 }
 
@@ -111,7 +137,7 @@ bool FillHolderCredentialDenseWitnessV1(
   constexpr std::size_t kPayloadPadded = 384;
   constexpr std::size_t kCompactChars = 662;
   constexpr std::size_t kDisclosureChars = 42;
-  constexpr std::size_t kPresentationBlocks = 9;
+  constexpr std::size_t kPresentationBlocks = 11;
   if (inputs.n0_ != 1 || layout.ranges.size() != 5 ||
       layout.ranges[0].name != "status-private-binding" ||
       layout.ranges[0].count != 256 ||
@@ -125,8 +151,9 @@ bool FillHolderCredentialDenseWitnessV1(
       witness.credential.payload.vct.empty() || witness.credential.payload.vct.size() > 32 ||
       witness.credential.issuer.signature.size() != 86 ||
       witness.compact_issuer.size() > kCompactChars ||
-      witness.credential.disclosures.size() != 1 ||
-      witness.credential.disclosures.front().size() != kDisclosureChars ||
+      witness.credential.disclosures.size() != 2 ||
+      witness.credential.disclosures[0].size() != kDisclosureChars ||
+      witness.credential.disclosures[1].size() != 26 ||
       !witness.credential.payload.holder_key || !bridge_writer)
     return false;
 
@@ -151,7 +178,7 @@ bool FillHolderCredentialDenseWitnessV1(
       signing_padded.data(), signing_sha.data());
   // The 10-block bucket reserves three zero-padded advice blocks; the active
   // compact credential still has the canonical seven SHA blocks.
-  if (signing_blocks != 7) return false;
+  if (signing_blocks != 9) return false;
 
   std::array<std::uint8_t, 64> disclosure_padded{};
   std::array<proofs::FlatSHA256Witness::BlockWitness, 1> disclosure_sha{};
@@ -162,9 +189,19 @@ bool FillHolderCredentialDenseWitnessV1(
           witness.credential.disclosures.front().data()),
       1, disclosure_blocks, disclosure_padded.data(), disclosure_sha.data());
   if (disclosure_blocks != 1) return false;
+  std::array<std::uint8_t, 64> array_disclosure_padded{};
+  std::array<proofs::FlatSHA256Witness::BlockWitness, 1> array_disclosure_sha{};
+  std::uint8_t array_disclosure_blocks{};
+  proofs::FlatSHA256Witness::transform_and_witness_message(
+      witness.credential.disclosures[1].size(),
+      reinterpret_cast<const std::uint8_t*>(witness.credential.disclosures[1].data()),
+      1, array_disclosure_blocks, array_disclosure_padded.data(),
+      array_disclosure_sha.data());
+  if (array_disclosure_blocks != 1) return false;
 
   const std::string presentation = witness.compact_issuer + "~" +
-      witness.credential.disclosures.front() + "~";
+      witness.credential.disclosures[0] + "~" +
+      witness.credential.disclosures[1] + "~";
   if (sha256_ascii(presentation) != witness.presentation_digest) return false;
   std::array<std::uint8_t, 64 * kPresentationBlocks> presentation_padded{};
   std::array<proofs::FlatSHA256Witness::BlockWitness, kPresentationBlocks>
@@ -181,6 +218,8 @@ bool FillHolderCredentialDenseWitnessV1(
   const auto digest_nat = to_nat(witness.credential.signing_digest);
   const auto disclosure_nat =
       to_nat(witness.credential.disclosure_digests.front());
+  const auto array_disclosure_nat =
+      to_nat(witness.credential.disclosure_digests[1]);
   const auto presentation_nat = to_nat(witness.presentation_digest);
   const auto issuer_x = proofs::p256_base.to_montgomery(
       to_nat(witness.credential.issuer_key.x));
@@ -212,8 +251,9 @@ bool FillHolderCredentialDenseWitnessV1(
   for (const auto byte : public_inputs.status_commitment) fill_v8(filler, byte);
   if (filler.size() != layout.public_inputs) return false;
 
-  const auto status_binding =
-      status_credential_binding_v1(witness.credential.signing_digest);
+  const auto status_binding = public_inputs.status_required
+      ? status_credential_binding_v1(witness.credential.signing_digest)
+      : std::array<std::uint8_t, 32>{};
   for (const auto byte : status_binding) fill_v8(filler, byte);
   std::string status_bridge_message{"sd-jwt-zk/status-private-bridge/v2"};
   status_bridge_message.append(reinterpret_cast<const char*>(status_binding.data()), status_binding.size());
@@ -307,6 +347,12 @@ bool FillHolderCredentialDenseWitnessV1(
   fill_v8(filler, shape->name);
   fill_v8(filler, shape->value);
   fill_v8(filler, shape->total);
+  for (const char byte : witness.credential.disclosures[1])
+    fill_v8(filler, static_cast<std::uint8_t>(byte));
+  for (const auto byte : array_disclosure_padded) fill_v8(filler, byte);
+  fill_sha(array_disclosure_sha);
+  for (std::size_t i = 0; i < 256; ++i)
+    filler.push_back(proofs::p256_base.of_scalar(array_disclosure_nat.bit(i)));
   for (const auto byte : presentation_padded) fill_v8(filler, byte);
   fill_sha(presentation_sha);
   for (std::size_t i = 0; i < 256; ++i)

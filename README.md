@@ -6,6 +6,9 @@ two-slot scalar disclosure relation; optional status proves `VALID` against a
 verifier-selected local snapshot. Native parsing is deliberately not an
 acceptance path.
 
+## Free without warranty
+This is free and open source software provided without warranty under the terms of the GNU GPL v3 license. Professional support, maintenance, integration services, and contractual warranty options are available separately. Please [contact us](mailto:info@forkbomb.eu) for further information.
+
 The public application boundary is [`presentation.h`](include/sd_jwt_zk/presentation.h).
 Build a typed bearer or holder request with an explicit exact issuer key,
 audience, purpose, nonce, time window, and either status-forbidden or
@@ -49,7 +52,11 @@ ctest --test-dir build --output-on-failure
 
 `SD_JWT_ZK_LONGFELLOW_TARGET` selects the installed target (default `LongfellowZK::static`). `SD_JWT_ZK_ENABLE_SANITIZERS=ON` enables ASan/UBSan. `SD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS=ON` enables the bounded real-proof and factory experiments and is off by default; the monolithic holder experiment remains disabled even in that lane.
 
-With the installed Longfellow prefix used by this project, ASan/UBSan passes the normal native/API, KB-JWT, fixture-bridge, and adapter-contract tests. The opt-in production-scale holder factory currently triggers an AddressSanitizer stack-buffer-overflow inside Longfellow's installed `Logic::eq_reduce` path while compiling the credential circuit; this dependency limitation is retained as sanitizer evidence and does not disable the normal sanitizer suite. The bounded non-sanitized holder-pair and public adapter proof round trips remain required and are run sequentially with a 180-second, 4-GiB-RSS budget.
+With the pinned installed Longfellow package, ASan/UBSan covers the default
+native/API suite and the deterministic reduced parser harness. Supported
+non-sanitized proof smokes are separate bounded release gates. Resource
+observations are environment-specific diagnostics, not timing or memory
+promises; see `docs/release-assurance.md`.
 
 The installed CMake package is `SDJWTZK`; downstream users call `find_package(SDJWTZK CONFIG REQUIRED)` and link `SDJWTZK::sd-jwt-zk`.
 

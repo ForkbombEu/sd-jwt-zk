@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/api.h"
 
 #include <algorithm>
@@ -43,7 +61,11 @@ Result<RestrictedIssuerPayload> parse_restricted_issuer_payload(
   // nested objects and hidden trailing content before circuit construction.
   if (!consume(json, at, "{\"_sd\":[") || !quoted(json, at, result.digest, 43) ||
       result.digest.size() != 43 || !b64url(result.digest) ||
-      !consume(json, at, "],\"iss\":" ) || !quoted(json, at, result.issuer, limits.max_field) ||
+      !consume(json, at, "],\"items\":[{\"...\":" ) ||
+      !quoted(json, at, result.array_digest, 43) ||
+      result.array_digest.size() != 43 || !b64url(result.array_digest) ||
+      result.array_digest == result.digest ||
+      !consume(json, at, "}],\"iss\":" ) || !quoted(json, at, result.issuer, limits.max_field) ||
       !consume(json, at, ",\"vct\":" ) || !quoted(json, at, result.vct, limits.max_field)) {
     return Result<RestrictedIssuerPayload>::fail(ErrorCode::malformed, "restricted payload grammar");
   }

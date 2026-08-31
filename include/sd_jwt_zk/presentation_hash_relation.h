@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <array>
@@ -70,6 +88,57 @@ class PresentationHashRelation {
                          static_cast<std::uint8_t>(bits >> ((7 - i) * 8)));
   }
 
+  const LogicCircuit& logic_;
+};
+
+template <class LogicCircuit, std::size_t ShaBlocks, std::size_t IssuerChars,
+          std::size_t ObjectChars, std::size_t ArrayChars>
+class TwoDisclosurePresentationHashRelation {
+  using v8 = typename LogicCircuit::v8;
+  using v256 = typename LogicCircuit::v256;
+  using Sha = proofs::FlatSHA256Circuit<LogicCircuit,
+      proofs::BitPlucker<LogicCircuit, 4>>;
+  static constexpr std::size_t kMessageChars =
+      IssuerChars + ObjectChars + ArrayChars + 3;
+ public:
+  struct Input {
+    const std::array<v8, IssuerChars>& issuer_compact;
+    const std::array<v8, ObjectChars>& object_disclosure;
+    const std::array<v8, ArrayChars>& array_disclosure;
+    const std::array<v8, 64 * ShaBlocks>& sha_input;
+    const std::array<typename Sha::BlockWitness, ShaBlocks>& sha_witness;
+    const v256& digest_bits;
+    const std::array<v8, 43>& sd_hash_b64url;
+  };
+  explicit TwoDisclosurePresentationHashRelation(const LogicCircuit& logic)
+      : logic_(logic) {}
+  void assert_valid(const Input& in) const {
+    std::size_t at = 0;
+    for (const auto& byte : in.issuer_compact) logic_.vassert_eq(in.sha_input[at++], byte);
+    logic_.vassert_eq(in.sha_input[at++], '~');
+    for (const auto& byte : in.object_disclosure) logic_.vassert_eq(in.sha_input[at++], byte);
+    logic_.vassert_eq(in.sha_input[at++], '~');
+    for (const auto& byte : in.array_disclosure) logic_.vassert_eq(in.sha_input[at++], byte);
+    logic_.vassert_eq(in.sha_input[at++], '~');
+    logic_.vassert_eq(in.sha_input[kMessageChars], 0x80);
+    for (std::size_t i = kMessageChars + 1; i < 64 * ShaBlocks - 8; ++i)
+      logic_.vassert_eq(in.sha_input[i], 0);
+    const std::uint64_t bits = kMessageChars * 8;
+    for (std::size_t i = 0; i < 8; ++i)
+      logic_.vassert_eq(in.sha_input[64 * ShaBlocks - 8 + i],
+                        static_cast<std::uint8_t>(bits >> ((7 - i) * 8)));
+    Sha(logic_).assert_message_hash(ShaBlocks,
+        logic_.template vbit<8>(ShaBlocks), in.sha_input.data(),
+        in.digest_bits, in.sha_witness.data());
+    std::array<v8, 32> digest_bytes{};
+    RestrictedBase64UrlRelation<LogicCircuit>(logic_).decode(in.sd_hash_b64url,
+                                                              digest_bytes);
+    for (std::size_t byte = 0; byte < 32; ++byte)
+      for (std::size_t bit = 0; bit < 8; ++bit)
+        logic_.assert_eq(digest_bytes[byte][bit],
+                         in.digest_bits[(31 - byte) * 8 + bit]);
+  }
+ private:
   const LogicCircuit& logic_;
 };
 

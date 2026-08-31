@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/flat_bearer_proof.h"
 
 #include "circuits/ecdsa/verify_witness.h"
@@ -93,7 +111,7 @@ bool verify_es256(const P256Key& key, std::string_view input,
 Result<FlatBearerWitness> flat_bearer_witness_from_presentation(
     std::string_view presentation, const P256Key& issuer_key, const Limits& limits) {
   auto parsed = build_native_witness(presentation, limits);
-  if (!parsed || parsed.value->kb_jwt || parsed.value->disclosures.empty())
+  if (!parsed || parsed.value->kb_jwt || parsed.value->disclosures.size() != 2)
     return Result<FlatBearerWitness>::fail(ErrorCode::malformed, "not a bounded bearer presentation");
   const auto& issuer = parsed.value->issuer;
   auto payload_bytes = base64url_decode(issuer.payload, limits.max_field);
@@ -109,9 +127,12 @@ Result<FlatBearerWitness> flat_bearer_witness_from_presentation(
   FlatBearerWitness out{issuer, issuer_key, *signature.value,
                         Bytes(signing.begin(), signing.end()), sha256_ascii(signing),
                         parsed.value->disclosures, {}, *restricted.value};
-  for (const auto& disclosure : out.disclosures) {
+  const std::array<std::string_view, 2> signed_digests{
+      out.payload.digest, out.payload.array_digest};
+  for (std::size_t i = 0; i < out.disclosures.size(); ++i) {
+    const auto& disclosure = out.disclosures[i];
     auto digest = sha256_ascii(disclosure);
-    if (base64url_encode(Bytes(digest.begin(), digest.end())) != out.payload.digest)
+    if (base64url_encode(Bytes(digest.begin(), digest.end())) != signed_digests[i])
       return Result<FlatBearerWitness>::fail(ErrorCode::malformed, "disclosure is not bound by _sd");
     out.disclosure_digests.push_back(digest);
   }
@@ -150,17 +171,18 @@ bool FillFlatBearerDenseWitnessV1(
     const std::array<std::uint8_t, 32>& status_credential_binding,
     const std::array<std::uint8_t, 32>& status_context,
     const std::array<std::uint8_t, 32>& status_commitment) {
-  constexpr std::size_t kSigningBlocks = 5;
+  constexpr std::size_t kSigningBlocks = 6;
   constexpr std::size_t kHeaderChars = 102;
-  constexpr std::size_t kPayloadChars = 140;
+  constexpr std::size_t kPayloadChars = 228;
   constexpr std::size_t kPayloadDecoded = (kPayloadChars * 6) / 8;
   if (inputs.n0_ != 1 || inputs.n1_ != kFlatBearerDenseInputsV1 ||
       witness.issuer.protected_header.size() != kHeaderChars ||
       witness.issuer.payload.size() > kPayloadChars ||
       witness.signing_input.size() > 64 * kSigningBlocks ||
       witness.payload.issuer.size() > 255 || witness.payload.vct.empty() || witness.payload.vct.size() > 32 ||
-      witness.disclosures.size() != 1 ||
-      witness.disclosures.front().size() != 42 ||
+      witness.disclosures.size() != 2 ||
+      witness.disclosures[0].size() != 42 ||
+      witness.disclosures[1].size() != 26 ||
       witness.payload.digest.size() != 43)
     return false;
 
@@ -191,10 +213,7 @@ bool FillFlatBearerDenseWitnessV1(
                            witness.signing_input.size()),
           padded_signing, sha_advice, sha_block_count))
     return false;
-  // Header 102 + separator + payload at most 140 always occupies four SHA
-  // blocks after canonical SHA-256 padding.  Block five remains zero-padded
-  // advice and is still fully constrained by the circuit.
-  if (sha_block_count != 4) return false;
+  if (sha_block_count == 0 || sha_block_count > kSigningBlocks) return false;
 
   std::array<std::uint8_t, 64> padded_disclosure{};
   std::array<proofs::FlatSHA256Witness::BlockWitness, 1> disclosure_advice{};
@@ -207,6 +226,17 @@ bool FillFlatBearerDenseWitnessV1(
   if (disclosure_block_count != 1) return false;
   const auto disclosure_hash = sha256_ascii(witness.disclosures.front());
   const auto disclosure_digest_nat = to_nat(disclosure_hash);
+  std::array<std::uint8_t, 64> array_disclosure_padded{};
+  std::array<proofs::FlatSHA256Witness::BlockWitness, 1> array_disclosure_advice{};
+  std::uint8_t array_disclosure_blocks{};
+  proofs::FlatSHA256Witness::transform_and_witness_message(
+      witness.disclosures[1].size(),
+      reinterpret_cast<const std::uint8_t*>(witness.disclosures[1].data()), 1,
+      array_disclosure_blocks, array_disclosure_padded.data(),
+      array_disclosure_advice.data());
+  if (array_disclosure_blocks != 1) return false;
+  const auto array_disclosure_digest_nat =
+      to_nat(sha256_ascii(witness.disclosures[1]));
   std::array<std::uint8_t, 64> registry_vct_padded{};
   std::array<proofs::FlatSHA256Witness::BlockWitness, 1> registry_vct_advice{};
   std::uint8_t registry_vct_blocks{};
@@ -332,6 +362,19 @@ bool FillFlatBearerDenseWitnessV1(
         proofs::p256_base.of_scalar(disclosure_digest_nat.bit(bit)));
   for (const auto byte : witness.payload.digest)
     fill_v8(filler, static_cast<std::uint8_t>(byte));
+  for (const auto byte : witness.disclosures[1])
+    fill_v8(filler, static_cast<std::uint8_t>(byte));
+  for (const auto byte : array_disclosure_padded) fill_v8(filler, byte);
+  for (std::size_t word = 0; word < 48; ++word)
+    filler.push_back(encoder.mkpacked_v32(array_disclosure_advice[0].outw[word]));
+  for (std::size_t word = 0; word < 64; ++word) {
+    filler.push_back(encoder.mkpacked_v32(array_disclosure_advice[0].oute[word]));
+    filler.push_back(encoder.mkpacked_v32(array_disclosure_advice[0].outa[word]));
+  }
+  for (std::size_t word = 0; word < 8; ++word)
+    filler.push_back(encoder.mkpacked_v32(array_disclosure_advice[0].h1[word]));
+  for (std::size_t bit = 0; bit < 256; ++bit)
+    filler.push_back(proofs::p256_base.of_scalar(array_disclosure_digest_nat.bit(bit)));
   fill_v8(filler, shape->salt);
   fill_v8(filler, shape->name);
   fill_v8(filler, shape->value);

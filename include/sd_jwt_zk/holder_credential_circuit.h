@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <algorithm>
@@ -53,16 +71,18 @@ BuildHolderCredentialCircuitV1(
   // 514 bytes (seven signing blocks) while retaining zero-padded parser
   // capacity.  Larger active compact lengths require a distinct circuit ID.
   constexpr std::size_t B = 10, H = 102, P = 472, Pad = 384, Compact = 662;
-  constexpr std::size_t DisclosureChars = 42, ActiveCompact = 514;
-  constexpr std::size_t PresentationBlocks = 9;
+  constexpr std::size_t DisclosureChars = 42, ArrayDisclosureChars = 26,
+                        ActiveCompact = 600;
+  constexpr std::size_t PresentationBlocks = 11;
   using L = HolderCredentialLogic;
   using Issuer = IssuerJwsRelation<L, B, H, P, Pad, 9>;
   using Holder = HolderIssuerJwsRelation<L, B, H, P, Pad>;
   using Sha = proofs::FlatSHA256Circuit<L, proofs::BitPlucker<L, 4>>;
   using Ecdsa = proofs::VerifyCircuit<L, HolderCredentialField, proofs::P256>;
   using Disclosure = FlatDisclosureRelation<L, 1, DisclosureChars>;
-  using Presentation = PresentationHashRelation<
-      L, PresentationBlocks, ActiveCompact, DisclosureChars>;
+  using Presentation = TwoDisclosurePresentationHashRelation<
+      L, PresentationBlocks, ActiveCompact, DisclosureChars,
+      ArrayDisclosureChars>;
   using Bridge = HolderBridgeMacRelation<L>;
   HolderCredentialBackend backend(q);
   L logic(&backend, proofs::p256_base);
@@ -129,7 +149,7 @@ BuildHolderCredentialCircuitV1(
   auto compact_len = holder_credential_detail::bits<L, 10>(logic);
   typename Issuer::Input issuer{sha_in, sha_w, digest_bits, header, header_json,
       payload, payload_json, header_len, payload_len, padded, issuer_len, vct_len,
-      decoded_len, explicit_sha, issuer_x, issuer_y, issuer_digest, issuer_ecdsa, 7};
+      decoded_len, explicit_sha, issuer_x, issuer_y, issuer_digest, issuer_ecdsa, 9};
   auto disclosure = holder_credential_detail::bytes<L, DisclosureChars>(logic);
   auto disclosure_sha = holder_credential_detail::bytes<L, 64>(logic);
   std::array<Sha::BlockWitness, 1> disclosure_w{}; disclosure_w[0].input(logic);
@@ -141,6 +161,18 @@ BuildHolderCredentialCircuitV1(
   auto name_len = holder_credential_detail::bits<L, 8>(logic);
   auto value_len = holder_credential_detail::bits<L, 8>(logic);
   auto disclosure_len8 = holder_credential_detail::bits<L, 8>(logic);
+  using ArrayDisclosure = FlatDisclosureRelation<L, 1, ArrayDisclosureChars>;
+  auto array_disclosure = holder_credential_detail::bytes<L, ArrayDisclosureChars>(logic);
+  auto array_disclosure_sha = holder_credential_detail::bytes<L, 64>(logic);
+  std::array<Sha::BlockWitness, 1> array_disclosure_w{};
+  array_disclosure_w[0].input(logic);
+  auto array_disclosure_digest = holder_credential_detail::bits<L, 256>(logic);
+  std::array<L::v8, 43> array_signed_digest{};
+  for (std::size_t i = 0; i < array_signed_digest.size(); ++i)
+    array_signed_digest[i] = payload_json[72 + i];
+  typename ArrayDisclosure::Input array_disclosure_input{
+      array_disclosure, array_disclosure_sha, array_disclosure_w,
+      array_disclosure_digest, array_signed_digest, 1};
   auto presentation_padded = holder_credential_detail::bytes<L, 64 * PresentationBlocks>(logic);
   std::array<Sha::BlockWitness, PresentationBlocks> presentation_w{};
   for (auto& w : presentation_w) w.input(logic);
@@ -168,13 +200,20 @@ BuildHolderCredentialCircuitV1(
   constexpr std::array<std::uint8_t, 4> value{'t','r','u','e'};
   disclosure_relation.assert_named_string_policy(
       disclosure_json, salt_len, name_len, value_len, name, value, policy, 9);
+  ArrayDisclosure array_disclosure_relation(logic);
+  array_disclosure_relation.assert_digest_match(array_disclosure_input);
+  std::array<L::v8, (ArrayDisclosureChars * 6) / 8> array_disclosure_json{};
+  RestrictedBase64UrlRelation<L>(logic).decode(array_disclosure,
+                                               array_disclosure_json);
+  array_disclosure_relation.template assert_two_string_array<8, 4>(
+      array_disclosure_json);
 #ifdef SD_JWT_ZK_HOLDER_FACTORY_METRICS
   stage("disclosure-policy");
 #endif
   std::array<L::v8, ActiveCompact> active_compact{};
   std::copy_n(compact.begin(), ActiveCompact, active_compact.begin());
   typename Presentation::Input presentation{
-      active_compact, disclosure, presentation_padded, presentation_w,
+      active_compact, disclosure, array_disclosure, presentation_padded, presentation_w,
       presentation_digest, sd_hash};
   Presentation(logic).assert_valid(presentation);
   for (std::size_t byte = 0; byte < status_binding.size(); ++byte) {

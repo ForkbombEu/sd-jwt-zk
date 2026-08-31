@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/api.h"
 #include "sd_jwt_zk/bounded_json.h"
 #include <algorithm>
@@ -31,7 +49,7 @@ int main(){
   auto identity=encode_identity(id);check(identity&&identity.value.value()==v.at("identity"),"canonical identity golden bytes");
   auto encoded=encode_request(r);check(encoded&&encoded.value.value()==v.at("request"),"canonical request golden bytes");auto decoded=encoded?decode_request(*encoded.value):Result<Request>::fail(ErrorCode::malformed,"skip");check(decoded&&decoded.value->nonce==r.nonce,"request round trip");
   if(encoded){for(size_t i=0;i<encoded.value->size();++i){Bytes cut(encoded.value->begin(),encoded.value->begin()+static_cast<long>(i));check(!decode_request(cut),"every request truncation rejects");}Bytes trailing=*encoded.value;trailing.push_back(0);check(!decode_request(trailing),"request trailing rejects");}
-  Envelope e{r,{1,2,3}};auto wire=encode_envelope(e);check(wire&&wire.value.value()==v.at("envelope"),"canonical envelope golden bytes");check(wire&&decode_envelope(*wire.value),"envelope round trip");if(wire){for(size_t i=0;i<wire.value->size();++i){Bytes cut(wire.value->begin(),wire.value->begin()+static_cast<long>(i));check(!decode_envelope(cut),"every envelope truncation rejects");}}auto large_envelope=e;large_envelope.proof.assign(128*1024,7);auto large_wire=encode_envelope(large_envelope);check(large_wire&&decode_envelope(*large_wire.value),"proof envelope may exceed request input bound");Limits small_proof{};small_proof.max_proof=1024;check(!encode_envelope(large_envelope,small_proof),"proof envelope retains component bound");
+  Envelope e{r,{1,2,3}};auto wire=encode_envelope(e);check(wire&&wire.value.value()==v.at("envelope"),"canonical envelope golden bytes");check(wire&&decode_envelope(*wire.value),"envelope round trip");if(wire){for(size_t i=0;i<wire.value->size();++i){Bytes cut(wire.value->begin(),wire.value->begin()+static_cast<long>(i));check(!decode_envelope(cut),"every envelope truncation rejects");}}Limits exact_proof{};exact_proof.max_proof=e.proof.size();check(static_cast<bool>(encode_envelope(e,exact_proof)),"proof accepts configured component limit");exact_proof.max_proof=e.proof.size()-1;check(!encode_envelope(e,exact_proof),"proof rejects one over configured component limit");auto large_envelope=e;large_envelope.proof.assign(128*1024,7);auto large_wire=encode_envelope(large_envelope);check(large_wire&&decode_envelope(*large_wire.value),"proof envelope may exceed request input bound");Limits small_proof{};small_proof.max_proof=1024;check(!encode_envelope(large_envelope,small_proof),"proof envelope retains component bound");
   CircuitIdentity holder_id{Binding::holder_bound,Trust::exact_key,256,{},"p256-base",4,128};holder_id.circuit_digest[0]=1;
   CircuitIdentity kb_id=holder_id;kb_id.circuit_digest[0]=2;
   Request holder_request{holder_id,"https://verifier.example","holder-nonce",1,2,{1},{1},{}, {}};
@@ -64,11 +82,11 @@ int main(){
   auto hash=sha256_ascii("abc");check(hash[0]==0xba&&hash[1]==0x78&&hash[31]==0xad,"exact ASCII SHA-256 vector");
   check(!base64url_decode("A"),"noncanonical base64 length");check(!base64url_decode("AA="),"padding rejected");check(static_cast<bool>(base64url_decode("AA")),"base64url accepted");check(!decode_es256_signature("AA"),"short signature rejected");check(!decode_p256_jwk("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),"infinite point rejected");
   Bytes raw(64,1);auto sig=decode_es256_signature(base64url_encode(raw));check(sig&&es256_signature_is_low_s(*sig.value),"low-S decision");std::fill(raw.begin()+32,raw.end(),0xff);check(!decode_es256_signature(base64url_encode(raw)),"P-256 scalar range rejects");
-  auto j=split_compact_jws("eyJhIjoxfQ.eyJiIjoyfQ.AA");check(static_cast<bool>(j),"compact JWS split");check(!split_compact_jws("a.b.c.d"),"extra delimiter rejected");
-  check(static_cast<bool>(build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~")),"native witness accepts terminal tilde");check(!build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~~"),"native witness rejects empty disclosure");Limits tight{};tight.max_input=8;check(!build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~",tight),"bounded native allocation");
-  auto flat=parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\",\"_sd_alg\":\"sha-256\"}");
+  auto j=split_compact_jws("eyJhIjoxfQ.eyJiIjoyfQ.AA");check(static_cast<bool>(j),"compact JWS split");check(!split_compact_jws("a.b.c.d"),"extra delimiter rejected");Limits field_limit{};field_limit.max_field=2;check(static_cast<bool>(base64url_decode("AA",field_limit.max_field)),"base64url accepts configured field limit");check(!base64url_decode("AAA",field_limit.max_field),"base64url rejects one over configured field limit");
+  const std::string fixed_presentation="eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~AA~";check(static_cast<bool>(build_native_witness(fixed_presentation)),"native witness accepts exactly two disclosures and terminal tilde");check(!build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~"),"native witness rejects disclosure under-supply");check(!build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~AA~AA~"),"native witness rejects disclosure over-supply before allocation");check(!build_native_witness("eyJhIjoxfQ.eyJiIjoyfQ.AA~AA~~"),"native witness rejects empty disclosure");Limits tight{};tight.max_input=fixed_presentation.size();check(static_cast<bool>(build_native_witness(fixed_presentation,tight)),"native witness accepts configured input limit");--tight.max_input;check(!build_native_witness(fixed_presentation,tight),"native witness rejects one over configured input limit");
+  auto flat=parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"items\":[{\"...\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}],\"iss\":\"https://issuer.example\",\"vct\":\"example\",\"_sd_alg\":\"sha-256\"}");
   check(flat&&flat.value->issuer=="https://issuer.example"&&flat.value->explicit_sha256,"restricted payload explicit SHA grammar");
-  auto omitted=parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"did:example:issuer\",\"vct\":\"different-vct\"}");
+  auto omitted=parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"items\":[{\"...\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}],\"iss\":\"did:example:issuer\",\"vct\":\"different-vct\"}");
   check(omitted&&omitted.value->issuer=="did:example:issuer"&&!omitted.value->explicit_sha256,"restricted payload variable slots and SHA default branch");
   check(!parse_restricted_issuer_payload("{\"iss\":\"https://issuer.example\",\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"vct\":\"example\"}"),"restricted payload rejects reordered substring form");
   check(!parse_restricted_issuer_payload("{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\"}x"),"restricted payload rejects hidden trailing bytes");
@@ -79,7 +97,7 @@ int main(){
   const std::array<std::uint8_t, 32> gx{0x6b,0x17,0xd1,0xf2,0xe1,0x2c,0x42,0x47,0xf8,0xbc,0xe6,0xe5,0x63,0xa4,0x40,0xf2,0x77,0x03,0x7d,0x81,0x2d,0xeb,0x33,0xa0,0xf4,0xa1,0x39,0x45,0xd8,0x98,0xc2,0x96};
   const std::array<std::uint8_t, 32> gy{0x4f,0xe3,0x42,0xe2,0xfe,0x1a,0x7f,0x9b,0x8e,0xe7,0xeb,0x4a,0x7c,0x0f,0x9e,0x16,0x2b,0xce,0x33,0x57,0x6b,0x31,0x5e,0xce,0xcb,0xb6,0x40,0x68,0x37,0xbf,0x51,0xf5};
   const auto gxb64=base64url_encode({gx.begin(),gx.end()}), gyb64=base64url_encode({gy.begin(),gy.end()});
-  const auto holder_json="{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"iss\":\"https://issuer.example\",\"vct\":\"example\",\"cnf\":{\"jwk\":{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\""+gxb64+"\",\"y\":\""+gyb64+"\"}}}";
+  const auto holder_json="{\"_sd\":[\"rLEgifZgOhgUULbOLeMVksZ2AUIx1zgSsOJRzqLabnU\"],\"items\":[{\"...\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}],\"iss\":\"https://issuer.example\",\"vct\":\"example\",\"cnf\":{\"jwk\":{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\""+gxb64+"\",\"y\":\""+gyb64+"\"}}}";
   auto holder=parse_restricted_issuer_payload(holder_json);
   check(holder&&holder.value->holder_key&&holder.value->holder_key->x==gx&&p256_key_is_valid(*holder.value->holder_key),"restricted payload accepts canonical cnf P-256 JWK");
   auto wrong_curve=holder_json;const auto curve_at=wrong_curve.find("P-256");wrong_curve.replace(curve_at,5,"P-384");check(!parse_restricted_issuer_payload(wrong_curve),"restricted payload rejects cnf curve mutation");
@@ -115,7 +133,7 @@ int main(){
   check(!parse_bounded_json("\"\xC0\x80\""),"bounded JSON rejects overlong UTF-8");
   check(!parse_bounded_json("01"),"bounded JSON rejects leading-zero number");
   check(!parse_bounded_json("{}x"),"bounded JSON rejects hidden trailing bytes");
-  JsonLimits shallow{};shallow.max_depth=1;check(!parse_bounded_json("[[0]]",shallow),"bounded JSON enforces depth bucket");
-  JsonLimits tiny{};tiny.max_tokens=2;check(!parse_bounded_json("[0,1]",tiny),"bounded JSON enforces token bucket");
+  JsonLimits shallow{};shallow.max_depth=1;check(static_cast<bool>(parse_bounded_json("[0]",shallow)),"bounded JSON accepts configured depth limit");check(!parse_bounded_json("[[0]]",shallow),"bounded JSON rejects one over depth limit");
+  JsonLimits tiny{};tiny.max_tokens=3;check(static_cast<bool>(parse_bounded_json("[0]",tiny)),"bounded JSON accepts configured token limit");--tiny.max_tokens;check(!parse_bounded_json("[0]",tiny),"bounded JSON rejects one over token limit");JsonLimits byte_limit{};byte_limit.max_bytes=3;check(static_cast<bool>(parse_bounded_json("[0]",byte_limit)),"bounded JSON accepts configured byte limit");--byte_limit.max_bytes;check(!parse_bounded_json("[0]",byte_limit),"bounded JSON rejects one over byte limit");
   check(native_parsing_is_not_proof_verification(),"native parsing disclaimer");return failed?1:0;
 }

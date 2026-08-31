@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <memory>
@@ -405,7 +423,7 @@ BuildFullDisclosureBucketCircuitV1(proofs::QuadCircuit<proofs::Fp256Base>* q) {
                                &authenticated_payload_length,
                                &issuer_public_signing_digest,
                                &compact_opening, false);
-  CompactOpeningBridgeRelation<Logic, 102, 140, 5>(logic).assert_valid({
+  CompactOpeningBridgeRelation<Logic, 102, 228, 6>(logic).assert_valid({
       compact_opening.header, compact_opening.header_length,
       compact_opening.payload, compact_opening.payload_length,
       compact_opening.sha_input, compact_opening.sha_witness,

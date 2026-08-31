@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/flat_bearer_proof.h"
 
 #include "algebra/convolution.h"
@@ -275,7 +293,8 @@ Result<bool> verify_flat_bearer_v1(const Envelope& envelope,
                                        expected_request.status_public);
   const bool status_required = static_cast<bool>(status_policy);
   Bytes presentation_proof = envelope.proof;
-  std::array<std::uint8_t, 32> bridge_commitment{};
+  std::array<std::uint8_t, 32> bridge_commitment = status_private_bridge_v1(
+      std::array<std::uint8_t, 32>{}, statement);
   if (!expected_request.status_public.empty()) {
     Bytes status_proof;
     if (!split_status_proof(envelope.proof, &presentation_proof,

@@ -1,0 +1,38 @@
+{
+  "schema": "sd-jwt-zk/reduced-release-resources/v1",
+  "scope": "fixed-two-slot-scalar-exact-key-v1",
+  "measurement_environment": {
+    "host": "x86_64 Linux 6.12.95+deb13-amd64",
+    "compiler": "GCC 14.2.0",
+    "cmake": "3.31.6",
+    "longfellow_commit": "6850cf53f80fea4727fb05c84f4a9d7870bf8091"
+  },
+  "entry_points": [
+    {"name": "bearer-exact-key", "proof_components": 1, "compact_payload_capacity": 228,
+     "circuit_inputs": 33113, "public_inputs": 549, "quad_terms": 6805548,
+     "disclosure_slots": 2, "status": "optional-separate-local-valid"},
+    {"name": "holder-bound-exact-key", "proof_components": 2,
+     "credential_compact_length": 600, "kb_circuit_capacity": 216,
+     "credential_inputs": 72765, "credential_public_inputs": 1413,
+     "credential_quad_terms": 8156906, "kb_inputs": 15449,
+     "kb_public_inputs": 1377, "kb_quad_terms": 1975674,
+     "disclosure_slots": 2, "status": "optional-separate-local-valid"},
+    {"name": "local-valid-status", "proof_components": 1, "merkle_depth": 2,
+     "snapshot_leaves": 4, "merkle_public_inputs": 1, "status_policy_bytes": 88}
+  ],
+  "input_limits": {
+    "request_bytes": 65536,
+    "compact_or_json_field_bytes": 4096,
+    "proof_component_bytes": 1048576,
+    "disclosure_count": 2,
+    "bounded_json_bytes": 4096,
+    "bounded_json_depth": 8,
+    "bounded_json_tokens": 256,
+    "cli_file_bytes": 6291456,
+    "status_snapshot_entries": 4,
+    "status_path_siblings": 2
+  },
+  "timing_policy": "Wall time and peak RSS are environment-specific diagnostics and are not release promises.",
+  "excluded": ["32-slot", "issuer registry", "aggregate", "recursive",
+               "Swiss/swiyu", "full-family proof matrix"]
+}

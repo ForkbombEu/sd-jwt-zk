@@ -1,6 +1,25 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/flat_bearer_proof.h"
 #include "merkle/merkle_tree.h"
 #include "util/log.h"
+#include "nested_es256_fixture.h"
 
 #include <chrono>
 #include <fstream>
@@ -13,16 +32,9 @@ namespace {
 using Clock = std::chrono::steady_clock;
 constexpr char kHeader[] =
     "eyJhbGciOiJFUzI1NiIsInR5cCI6ImRjK3NkLWp3dCIsInByb2ZpbGVfdmVyc2lvbiI6InN3aXNzLXByb2ZpbGUtdmM6MS4wLjAifQ";
-constexpr char kPayload[] =
-    "eyJfc2QiOlsiRUtEMklOR1JlWkZtQXQ3LXZBbmNlY2VkUVRvb3gzNTlGR1hZR2dZUUJMOCJdLCJpc3MiOiJodHRwczovL2lzc3Vlci5leGFtcGxlIiwidmN0IjoiZXhhbXBsZSJ9";
-constexpr char kSignature[] =
-    "FQp4GsBBvr3_xbX1UtKSc7mtcw1ygaZ7Z-suRyHET3oggdcr1KqoyH-LA8Yy8pHr3xGkKrrQCu-7fCAbYrTljg";
 constexpr char kDisclosure[] =
     "WyJzYWx0LTAwMDEiLCJhZ2Vfb3ZlciIsInRydWUiXQ";
-constexpr char kX[] =
-    "Jl-RmGfWH_k-UmeHbUnLL58NFLxBz6qOzZqP7z_qxY4";
-constexpr char kY[] =
-    "VBuaEu3T_57clPlJDLwm8xnw1PHFyR4kbXUHyGsK9TU";
+constexpr char kArrayDisclosure[] = "WyJhcnJheTAwMSIsIml0ZW0iXQ";
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -48,14 +60,32 @@ bool accepted(const sd_jwt_zk::Result<bool>& result) {
 }  // namespace
 
 int main() {
-  std::ofstream result("/tmp/sd-jwt-zk-flat-bearer-proof-result.txt");
+  std::ofstream result("sd-jwt-zk-flat-bearer-proof-result.txt");
   try {
     proofs::set_log_level(proofs::ERROR);
-    const std::string issuer =
-        std::string(kHeader) + "." + kPayload + "." + kSignature;
-    const std::string presentation = issuer + "~" + kDisclosure + "~";
-    const auto issuer_key = sd_jwt_zk::decode_p256_jwk(kX, kY);
-    require(static_cast<bool>(issuer_key), "fixture issuer key rejected");
+    const auto digest_text = [](std::string_view disclosure) {
+      const auto digest = sd_jwt_zk::sha256_ascii(disclosure);
+      return sd_jwt_zk::base64url_encode(
+          sd_jwt_zk::Bytes(digest.begin(), digest.end()));
+    };
+    const std::string payload_json = "{\"_sd\":[\"" +
+        digest_text(kDisclosure) + "\"],\"items\":[{\"...\":\"" +
+        digest_text(kArrayDisclosure) +
+        "\"}],\"iss\":\"https://issuer.example\",\"vct\":\"example\"}";
+    const std::string payload = sd_jwt_zk::base64url_encode(
+        sd_jwt_zk::Bytes(payload_json.begin(), payload_json.end()));
+    const std::string signing = std::string(kHeader) + "." + payload;
+    std::array<unsigned char, 64> raw_signature{};
+    sd_jwt_zk::P256Key issuer_public{};
+    require(sd_jwt_zk::test::sign_nested_fixture_es256(
+                signing, raw_signature, &issuer_public),
+            "fixture issuer signing failed");
+    const std::string signature = sd_jwt_zk::base64url_encode(
+        sd_jwt_zk::Bytes(raw_signature.begin(), raw_signature.end()));
+    const std::string issuer = signing + "." + signature;
+    const std::string presentation = issuer + "~" + kDisclosure + "~" +
+                                     kArrayDisclosure + "~";
+    const auto issuer_key = sd_jwt_zk::Result<sd_jwt_zk::P256Key>::ok(issuer_public);
     auto witness = sd_jwt_zk::flat_bearer_witness_from_presentation(
         presentation, *issuer_key.value);
     require(static_cast<bool>(witness), "flat bearer witness rejected");
@@ -142,6 +172,12 @@ int main() {
     require(!sd_jwt_zk::prove_flat_bearer_v1(false_request,
                                              *witness.value),
             "false policy result produced a proof for true value");
+    auto changed_array = *witness.value;
+    changed_array.disclosures[1][0] = changed_array.disclosures[1][0] == 'A' ? 'B' : 'A';
+    changed_array.disclosure_digests[1] =
+        sd_jwt_zk::sha256_ascii(changed_array.disclosures[1]);
+    require(!sd_jwt_zk::prove_flat_bearer_v1(request, changed_array),
+            "issuer-unbound root-array disclosure produced a proof");
 
     auto expect_reject = [&](const sd_jwt_zk::Envelope& candidate,
                              const sd_jwt_zk::Request& expected,

@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #pragma once
 
 #include <array>
@@ -105,7 +123,7 @@ class RestrictedJsonRelation {
       const BitW shape = logic_.land(logic_.veq(issuer_length, issuer), logic_.veq(vct_length, vct));
       // The explicit spelling starts with the closing quote of `vct`; the
       // omitted spelling has that quote before its final closing brace.
-      const std::size_t explicit_at = 71 + issuer + vct;
+      const std::size_t explicit_at = 135 + issuer + vct;
       const std::size_t omitted_at = explicit_at + 1;
       const char explicit_text[] = "\",\"_sd_alg\":\"sha-256\"}";
       for (std::size_t i = 0; i < 22; ++i)
@@ -124,20 +142,27 @@ class RestrictedJsonRelation {
                            const Index& active_length,
                            std::size_t issuer_maximum = 64,
                            std::size_t vct_maximum = 64) const {
-    static constexpr char digest_to_issuer[] = "\"],\"iss\":\"";
-    for (std::size_t i = 0; i < 10; ++i)
-      logic_.vassert_eq(text[52 + i], static_cast<unsigned char>(digest_to_issuer[i]));
-    assert_literal_after_length(text, issuer_length, 62, 1, issuer_maximum, "\",\"vct\":\"", 9);
+    static constexpr char digest_to_array[] = "\"],\"items\":[{\"...\":\"";
+    static constexpr char array_to_issuer[] = "\"}],\"iss\":\"";
+    for (std::size_t i = 0; i < 20; ++i)
+      logic_.vassert_eq(text[52 + i], static_cast<unsigned char>(digest_to_array[i]));
+    for (std::size_t i = 0; i < 43; ++i) {
+      typename LogicCircuit::template bitvec<6> sextet{};
+      RestrictedBase64UrlRelation<LogicCircuit>(logic_).decode_char(text[72 + i], sextet);
+    }
+    for (std::size_t i = 0; i < 11; ++i)
+      logic_.vassert_eq(text[115 + i], static_cast<unsigned char>(array_to_issuer[i]));
+    assert_literal_after_length(text, issuer_length, 126, 1, issuer_maximum, "\",\"vct\":\"", 9);
     BitW selected = logic_.bit(0);
     for (std::size_t issuer = 1; issuer <= issuer_maximum; ++issuer) {
       for (std::size_t vct = 1; vct <= vct_maximum; ++vct) {
         const BitW shape = logic_.land(logic_.veq(issuer_length, issuer),
                                        logic_.veq(vct_length, vct));
         selected = logic_.lor_exclusive(selected, shape);
-        for (std::size_t i = 0; i < issuer; ++i) assert_safe_byte(shape, text[62 + i]);
-        for (std::size_t i = 0; i < vct; ++i) assert_safe_byte(shape, text[71 + issuer + i]);
-        const std::size_t explicit_size = 93 + issuer + vct;
-        const std::size_t omitted_size = 73 + issuer + vct;
+        for (std::size_t i = 0; i < issuer; ++i) assert_safe_byte(shape, text[126 + i]);
+        for (std::size_t i = 0; i < vct; ++i) assert_safe_byte(shape, text[135 + issuer + i]);
+        const std::size_t explicit_size = 157 + issuer + vct;
+        const std::size_t omitted_size = 137 + issuer + vct;
         const BitW explicit_branch = logic_.land(shape, explicit_sha256);
         const BitW omitted_branch = logic_.land(shape, logic_.lnot(explicit_sha256));
         logic_.assert_implies(explicit_branch, logic_.veq(active_length, explicit_size));

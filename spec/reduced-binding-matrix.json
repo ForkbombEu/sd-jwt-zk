@@ -1,0 +1,118 @@
+{
+  "schema": "sd-jwt-zk/reduced-binding-matrix/v1",
+  "release_surface": "fixed-two-slot-scalar-exact-key-v1",
+  "bindings": [
+    {
+      "field": "issuer_compact_jws",
+      "parsing": "split_compact_jws and restricted protected-header/payload grammars",
+      "constraint": "exact signing-input SHA-256 and ES256 P-256 relation",
+      "presentation_binding": "issuer proof component and credential commitment",
+      "verifier_policy": "exact issuer key selected locally",
+      "negative": {"source": "tests/test_fixtures.py", "contains": "signature_and_key_mutation"}
+    },
+    {
+      "field": "root_object_scalar_disclosure",
+      "parsing": "bounded JSON disclosure parser, fixed slot zero padding",
+      "constraint": "digest membership, authenticated source range, object placement and scalar type",
+      "presentation_binding": "active presentation hash",
+      "verifier_policy": "fixed two-slot claim policy",
+      "negative": {"source": "tests/cpp/disclosure_processing_test.cc", "contains": "bad_placeholder"}
+    },
+    {
+      "field": "root_array_scalar_disclosure",
+      "parsing": "bounded JSON disclosure parser, fixed slot zero padding",
+      "constraint": "digest membership, authenticated array index/range and scalar type",
+      "presentation_binding": "active presentation hash",
+      "verifier_policy": "fixed two-slot claim policy",
+      "negative": {"source": "tests/cpp/disclosure_processing_test.cc", "contains": "array order/index mutation"}
+    },
+    {
+      "field": "disclosure_count",
+      "parsing": "separator count checked before disclosure-vector allocation",
+      "constraint": "exactly two active disclosure slots",
+      "presentation_binding": "both ordered disclosures enter the presentation hash",
+      "verifier_policy": "no zero, one, or extra disclosure mode",
+      "negative": {"source": "tests/cpp/test_main.cc", "contains": "disclosure over-supply before allocation"}
+    },
+    {
+      "field": "bounded_claim_policy_and_result",
+      "parsing": "canonical request length-prefix decoder",
+      "constraint": "policy bytes and satisfied result are public circuit inputs",
+      "presentation_binding": "canonical request transcript seed",
+      "verifier_policy": "typed builder supplies the only supported policy/result",
+      "negative": {"source": "tests/cpp/test_main.cc", "contains": "claim-policy substitution rejects"}
+    },
+    {
+      "field": "holder_cnf_and_kb_jwt",
+      "parsing": "canonical cnf.jwk and KB-JWT restricted grammars",
+      "constraint": "valid P-256 holder key, KB signature, sd_hash, audience, nonce and iat",
+      "presentation_binding": "ordered credential/KB commitments and GF(2^128) bridge",
+      "verifier_policy": "holder-bound identity cannot downgrade to bearer",
+      "negative": {"source": "tests/cpp/test_main.cc", "contains": "bearer evidence cannot use holder envelope"}
+    },
+    {
+      "field": "audience_and_purpose",
+      "parsing": "typed builder rejects empty values and embedded 0x1f",
+      "constraint": "exact audience || 0x1f || purpose bytes are request public input",
+      "presentation_binding": "canonical request transcript seed and holder KB audience",
+      "verifier_policy": "verifier supplies both strings",
+      "negative": {"source": "tests/cpp/presentation_api_test.cc", "contains": "noncanonical audience-purpose separator rejects"}
+    },
+    {
+      "field": "nonce_time_and_replay",
+      "parsing": "canonical UTF-8 nonce and ordered uint64 time bounds",
+      "constraint": "request transcript and KB-JWT bind challenge/time",
+      "presentation_binding": "proof verification precedes atomic replay consumption",
+      "verifier_policy": "local clock and replay store fail closed",
+      "negative": {"source": "tests/cpp/test_main.cc", "contains": "holder nonce double consume rejects"}
+    },
+    {
+      "field": "exact_issuer_key",
+      "parsing": "32-byte coordinates plus full OpenSSL P-256 public check",
+      "constraint": "issuer ES256 verification uses the same exact key",
+      "presentation_binding": "encoded exact-key trust bytes enter request transcript",
+      "verifier_policy": "proof-supplied trust material is never accepted",
+      "negative": {"source": "tests/test_fixtures.py", "contains": "signature_and_key_mutation"}
+    },
+    {
+      "field": "local_status_credential_binding",
+      "parsing": "fixed status component and private index/path witness",
+      "constraint": "VALID leaf equals credential signing-digest binding",
+      "presentation_binding": "status bridge commitment includes presentation binding",
+      "verifier_policy": "status proof is required or forbidden without downgrade",
+      "negative": {"source": "tests/cpp/status_membership_real_proof.cc", "contains": "wrong_binding"}
+    },
+    {
+      "field": "trusted_snapshot_metadata_and_root",
+      "parsing": "canonical fixed-width issuer/root/epoch/time status policy",
+      "constraint": "Longfellow-owned fixed-depth Merkle path constrains selected root",
+      "presentation_binding": "trusted status policy bytes enter request transcript",
+      "verifier_policy": "snapshot is selected locally and checked for issuer/epoch/time",
+      "negative": {"source": "tests/cpp/status_membership_test.cc", "contains": "epoch substitution rejects"}
+    },
+    {
+      "field": "envelope_component_order",
+      "parsing": "versioned canonical bearer and typed holder envelope decoders",
+      "constraint": "credential then KB component identities and proof roles are distinct",
+      "presentation_binding": "complete ordered commitments precede bridge derivation",
+      "verifier_policy": "unsupported/malformed shapes reject before proof dispatch",
+      "negative": {"source": "tests/cpp/test_main.cc", "contains": "reversed holder order rejects"}
+    },
+    {
+      "field": "circuit_identity_and_proof_parameters",
+      "parsing": "version, binding, exact-key trust, capacity, digest, field, rate and queries",
+      "constraint": "factory and verifier select fixed accepted identities",
+      "presentation_binding": "identity is encoded into request and transcript seed",
+      "verifier_policy": "accepted circuit IDs are explicit",
+      "negative": {"source": "tests/cpp/test_main.cc", "contains": "proof identity substitution rejects"}
+    }
+  ],
+  "excluded": [
+    "issuer-registry trust",
+    "aggregate roots",
+    "recursive disclosures",
+    "Swiss/swiyu interoperability",
+    "retained 32-slot experiment",
+    "other capacity families"
+  ]
+}

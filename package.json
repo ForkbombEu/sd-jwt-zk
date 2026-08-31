@@ -1,6 +1,7 @@
 {
   "name": "sd-jwt-zk-docs",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "docs:build": "vitepress build docs"
   },

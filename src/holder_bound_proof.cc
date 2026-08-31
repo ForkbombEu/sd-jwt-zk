@@ -1,3 +1,21 @@
+/*
+ * Copyright (C) 2026 by The Forkbomb Company
+ * designed, written and maintained by Denis Roio
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "sd_jwt_zk/holder_bound_proof.h"
 
 #include <algorithm>
@@ -328,6 +346,9 @@ struct HolderBoundCircuitProverV1::Impl {
       for (auto& randomness : bridge.randomness)
         mac.sample(randomness.data(), randomness.size(), &random);
       credential_public.policy_result = true;
+      credential_public.status_commitment = status_private_bridge_v1(
+          std::array<std::uint8_t, 32>{},
+          std::array<std::uint8_t, 32>{});
       if (!policy.request.status_public.empty()) {
         const auto status = decode_status_policy_v1(policy.request.status_public);
         if (!status) return;
@@ -563,6 +584,9 @@ bool HolderBoundCircuitVerifierV1::verify(
     fork_component(transcript, component);
     if (component == HolderComponent::credential) {
       HolderCredentialPublicInputsV1 inputs{tags, challenge, true};
+      inputs.status_commitment = status_private_bridge_v1(
+          std::array<std::uint8_t, 32>{},
+          std::array<std::uint8_t, 32>{});
       if (!request.status_public.empty()) {
         const auto status = decode_status_policy_v1(request.status_public);
         if (!status) return false;
