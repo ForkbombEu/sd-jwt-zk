@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 build/
 build-*/
+node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/

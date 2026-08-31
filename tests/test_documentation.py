@@ -4,6 +4,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 class DocumentationTests(unittest.TestCase):
+    def test_product_site_has_required_pages_and_no_positive_deferred_claims(self):
+        required = {
+            "index.md", "what-it-proves.md", "architecture.md", "protocol.md",
+            "two-slot-relation.md", "getting-started.md", "workflows.md",
+            "status-operations.md", "security-claims.md", "privacy.md",
+            "unsupported.md", "glossary.md", "specification.md", "api.md",
+        }
+        self.assertTrue(required.issubset({path.name for path in (ROOT / "docs").glob("*.md")}))
+        site = "\n".join(path.read_text() for path in (ROOT / "docs").glob("*.md"))
+        for claim in ("Swiss-compatible", "supports issuer hiding",
+                      "supports recursive", "aggregate-registry support",
+                      "performance guarantee"):
+            self.assertNotIn(claim, site)
+        for token in ("BuildBearerPresentationRequestV1",
+                      "BuildHolderPresentationRequestV1", "VerifyRelation",
+                      "VerifyPresentation", "PresentationResultV1",
+                      "fixtures/compact-vectors.json"):
+            self.assertIn(token, site)
+
+    def test_product_boundary_is_explicit(self):
+        text = (ROOT / "README.md").read_text()
+        for token in ("VerifyRelation", "VerifyPresentation", "status-forbidden",
+                      "status-required", "exact-key bearer", "holder-bound",
+                      "independent cryptographic"):
+            self.assertIn(token, text)
+        for forbidden in ("Swiss-compatible", "aggregate registry",
+                          "recursive disclosure support", "performance guarantee"):
+            self.assertNotIn(forbidden, text)
     def test_required_decisions_and_labels_once(self):
         text = (ROOT / "spec/compatibility.md").read_text()
         for token in ("MVP", "later", "external", "unsupported", "omission defaults to SHA-256", "not Swiss-profile conformant"):

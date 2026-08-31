@@ -61,7 +61,7 @@ int main() {
     require(static_cast<bool>(witness), "flat bearer witness rejected");
     sd_jwt_zk::Request request{
         sd_jwt_zk::flat_bearer_circuit_identity_v1(),
-        "https://verifier.example", "nonce-flat-bearer-round-trip-v1",
+        "https://verifier.example\x1f" "cli-status", "cli-status-nonce",
         100, 200, sd_jwt_zk::flat_bearer_policy_v1(),
         sd_jwt_zk::flat_bearer_true_policy_result_v1(),
         sd_jwt_zk::flat_bearer_exact_key_trust_v1(*issuer_key.value), {}};

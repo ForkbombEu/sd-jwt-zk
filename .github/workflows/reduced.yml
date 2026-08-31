@@ -1,0 +1,51 @@
+name: reduced-release
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore public compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'include/**', 'src/**') }}
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build libssl-dev
+      - name: Fetch pinned Longfellow source
+        uses: actions/checkout@v4
+        with:
+          repository: dyne/longfellow-zk
+          ref: 6850cf53f80fea4727fb05c84f4a9d7870bf8091
+          path: .deps/longfellow-zk
+      - name: Build installed Longfellow dependency
+        env:
+          SD_JWT_ZK_LONGFELLOW_SOURCE: ${{ github.workspace }}/.deps/longfellow-zk
+        run: ./ci/install-longfellow.sh "$RUNNER_TEMP/longfellow"
+      - name: Reduced release-equivalent checks
+        env:
+          CMAKE_PREFIX_PATH: ${{ runner.temp }}/longfellow
+          SD_JWT_ZK_BUILD_DIR: ${{ runner.temp }}/sd-jwt-zk-build
+          SD_JWT_ZK_INSTALL_DIR: ${{ runner.temp }}/sd-jwt-zk-install
+        run: ./ci/reduced.sh
+      - name: Bounded static and sanitizer checks
+        env:
+          CMAKE_PREFIX_PATH: ${{ runner.temp }}/longfellow
+          SD_JWT_ZK_QUALITY_BUILD_DIR: ${{ runner.temp }}/sd-jwt-zk-quality
+        run: ./ci/quality.sh
+      - name: Write source checksum
+        run: ./ci/write-checksum.sh "$RUNNER_TEMP/sd-jwt-zk-build/sd-jwt-zk-0.1.0-Source.tar.gz" "$RUNNER_TEMP/sd-jwt-zk-build/SHA256SUMS"
+      - name: Publish source candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: sd-jwt-zk-source-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/sd-jwt-zk-build/sd-jwt-zk-0.1.0-Source.tar.gz
+            ${{ runner.temp }}/sd-jwt-zk-build/SHA256SUMS

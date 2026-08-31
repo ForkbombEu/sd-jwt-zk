@@ -24,7 +24,7 @@ add_library(sd-jwt-zk src/codec.cc src/native.cc src/restricted_json.cc src/boun
   src/sha256.cc src/flat_bearer_witness.cc src/flat_bearer_proof.cc
   src/status_membership.cc
   src/holder_kb_witness.cc src/holder_credential_witness.cc
-  src/holder_bound_proof.cc)
+  src/holder_bound_proof.cc src/presentation.cc)
 add_library(SDJWTZK::sd-jwt-zk ALIAS sd-jwt-zk)
 target_compile_features(sd-jwt-zk PUBLIC cxx_std_20)
 target_include_directories(sd-jwt-zk PUBLIC
@@ -64,6 +64,19 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/SDJWTZKConfig.cmake
   ${CMAKE_CURRENT_BINARY_DIR}/SDJWTZKConfigVersion.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/SDJWTZK)
 install(FILES README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK)
+install(DIRECTORY docs/ spec/ DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK
+  FILES_MATCHING PATTERN "*.md" PATTERN "reference-lock.json"
+  PATTERN ".vitepress" EXCLUDE)
+install(FILES fixtures/compact-vectors.json
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/SDJWTZK/vectors)
+
+set(CPACK_PACKAGE_NAME "sd-jwt-zk")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_SOURCE_GENERATOR "TGZ")
+set(CPACK_SOURCE_IGNORE_FILES
+  "/[.]git/" "/[.]gestalt/" "/build[^/]*/" "/node_modules/"
+  "/docs/[.]vitepress/(dist|cache)/" "~$" "[.]pyc$")
+include(CPack)
 
 if(BUILD_TESTING)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
@@ -72,6 +85,14 @@ if(BUILD_TESTING)
   target_link_libraries(sd-jwt-zk-tests PRIVATE SDJWTZK::sd-jwt-zk)
   target_compile_definitions(sd-jwt-zk-tests PRIVATE SD_JWT_ZK_TESTDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/cpp/testdata")
   add_test(NAME sd-jwt-zk-tests COMMAND sd-jwt-zk-tests)
+  add_executable(sd-jwt-zk-presentation-api tests/cpp/presentation_api_test.cc)
+  target_link_libraries(sd-jwt-zk-presentation-api PRIVATE SDJWTZK::sd-jwt-zk)
+  add_test(NAME sd-jwt-zk-presentation-api COMMAND sd-jwt-zk-presentation-api)
+  add_executable(sd-jwt-zk-cli-status-fixture-gen tests/cpp/cli_status_fixture_gen.cc)
+  target_link_libraries(sd-jwt-zk-cli-status-fixture-gen PRIVATE SDJWTZK::sd-jwt-zk)
+  add_test(NAME sd-jwt-zk-cli-safe-workflows
+    COMMAND ${CMAKE_COMMAND} -E env SD_JWT_ZK_CLI=$<TARGET_FILE:sd-jwt-zk-cli>
+      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.py)
   add_executable(sd-jwt-zk-holder-bound-adapter-contract
     tests/cpp/holder_bound_adapter_contract.cc)
   target_link_libraries(sd-jwt-zk-holder-bound-adapter-contract
@@ -89,9 +110,13 @@ if(BUILD_TESTING)
     add_test(NAME sd-jwt-zk-status-membership-real-proof
       COMMAND sd-jwt-zk-status-membership-real-proof)
   endif()
+  set(_sd_jwt_zk_merkle_audit ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/merkle_ownership_audit.py)
+  if(CMAKE_PREFIX_PATH)
+    list(APPEND _sd_jwt_zk_merkle_audit --install-prefix ${CMAKE_PREFIX_PATH})
+  endif()
   add_test(NAME sd-jwt-zk-merkle-ownership-audit
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/merkle_ownership_audit.py
-      --install-prefix ${CMAKE_PREFIX_PATH})
+    COMMAND ${_sd_jwt_zk_merkle_audit})
   if(SD_JWT_ZK_ENABLE_EXPENSIVE_PROOF_TESTS)
     add_executable(sd-jwt-zk-full-disclosure-32-compile tests/cpp/full_disclosure_32_compile.cc)
     target_link_libraries(sd-jwt-zk-full-disclosure-32-compile PRIVATE SDJWTZK::sd-jwt-zk)
@@ -251,4 +276,6 @@ if(BUILD_TESTING)
   add_test(NAME sd-jwt-zk-cli-help COMMAND sd-jwt-zk-cli --help)
   add_test(NAME sd-jwt-zk-fixtures COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fixtures.py)
   add_test(NAME sd-jwt-zk-documentation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_documentation.py)
+  add_test(NAME sd-jwt-zk-release-policy
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_policy.py)
 endif()
