@@ -22,11 +22,13 @@
 #include <charconv>
 #include <cerrno>
 #include <cstdint>
+#include <dirent.h>
 #include <fcntl.h>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -36,13 +38,38 @@ using sd_jwt_zk::Bytes;
 // components. Secret input formats remain much smaller and are checked again
 // by their canonical decoders.
 constexpr std::size_t kMaxCommandFile = 6 * 1024 * 1024;
+constexpr std::size_t kMaxNonceEntries = 4096;
+
+bool fsync_retry(int fd) {
+  while (fsync(fd) != 0) {
+    if (errno != EINTR) return false;
+  }
+  return true;
+}
+
+struct OutputPath {
+  std::string parent;
+  std::string name;
+};
+
+std::optional<OutputPath> split_output_path(std::string_view path) {
+  if (path.empty() || path.size() > 4096 || path.back() == '/') return std::nullopt;
+  const auto slash = path.rfind('/');
+  OutputPath output{
+      slash == std::string_view::npos ? "." : slash == 0 ? "/" : std::string(path.substr(0, slash)),
+      std::string(path.substr(slash == std::string_view::npos ? 0 : slash + 1))};
+  if (output.name.empty() || output.name == "." || output.name == "..") return std::nullopt;
+  return output;
+}
 
 void usage() {
   std::cout << "usage:\n"
             << "  sd-jwt-zk challenge create --mode bearer|holder --audience A --purpose P"
                " --nonce-file FILE --issuer-key-file FILE --time-min N --time-max N --out FILE\n"
-            << "  sd-jwt-zk prove --challenge FILE --presentation-file FILE --issuer-key-file FILE --out FILE\n"
-            << "  sd-jwt-zk verify --challenge FILE --proof-file FILE --now N --nonce-store FILE\n"
+            << "  sd-jwt-zk prove --mode bearer|holder --challenge FILE --presentation-file FILE"
+               " --issuer-key-file FILE --out FILE\n"
+            << "  sd-jwt-zk verify --mode bearer|holder --challenge FILE --proof-file FILE"
+               " --now N --nonce-store FILE\n"
             << "  sd-jwt-zk inspect --input FILE\n";
 }
 
@@ -60,6 +87,7 @@ std::optional<Bytes> read_protected(std::string_view path) {
   std::size_t offset = 0;
   while (offset < data.size()) {
     const auto received = read(fd, data.data() + offset, data.size() - offset);
+    if (received < 0 && errno == EINTR) continue;
     if (received <= 0) { close(fd); return std::nullopt; }
     offset += static_cast<std::size_t>(received);
   }
@@ -67,41 +95,47 @@ std::optional<Bytes> read_protected(std::string_view path) {
   return data;
 }
 
-bool sync_parent(std::string_view path) {
-  const auto slash = path.rfind('/');
-  const std::string parent = slash == std::string_view::npos
-      ? "."
-      : slash == 0 ? "/" : std::string(path.substr(0, slash));
-  const int fd = open(parent.c_str(), O_RDONLY | O_CLOEXEC | O_DIRECTORY);
-  if (fd < 0) return false;
-  const bool ok = fsync(fd) == 0;
-  return close(fd) == 0 && ok;
+void unlink_same_inode(int directory_fd, const std::string& name,
+                       const struct stat& created) {
+  struct stat current {};
+  if (fstatat(directory_fd, name.c_str(), &current, AT_SYMLINK_NOFOLLOW) == 0 &&
+      current.st_dev == created.st_dev && current.st_ino == created.st_ino) {
+    unlinkat(directory_fd, name.c_str(), 0);
+  }
 }
 
 bool write_new_owner_only(std::string_view path, const Bytes& data) {
-  if (path.empty() || path.size() > 4096) return false;
-  const int fd = open(std::string(path).c_str(),
+  const auto output = split_output_path(path);
+  if (!output) return false;
+  const int directory_fd = open(output->parent.c_str(),
+      O_RDONLY | O_CLOEXEC | O_DIRECTORY | O_NOFOLLOW);
+  if (directory_fd < 0) return false;
+  const int fd = openat(directory_fd, output->name.c_str(),
       O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
-  if (fd < 0) return false;
+  if (fd < 0) { close(directory_fd); return false; }
+  struct stat created {};
+  if (fstat(fd, &created) != 0 || !S_ISREG(created.st_mode)) {
+    close(fd);
+    close(directory_fd);
+    return false;
+  }
   std::size_t offset = 0;
+  bool ok = true;
   while (offset < data.size()) {
     const auto sent = write(fd, data.data() + offset, data.size() - offset);
     if (sent < 0 && errno == EINTR) continue;
-    if (sent <= 0) {
-      close(fd);
-      unlink(std::string(path).c_str());
-      return false;
-    }
+    if (sent <= 0) { ok = false; break; }
     offset += static_cast<std::size_t>(sent);
   }
-  const bool synced = fsync(fd) == 0;
-  const bool closed = close(fd) == 0;
-  const bool parent_synced = synced && closed && sync_parent(path);
-  if (!parent_synced) {
-    unlink(std::string(path).c_str());
-    sync_parent(path);
+  if (ok) ok = fsync_retry(fd);
+  if (close(fd) != 0) ok = false;
+  if (ok) ok = fsync_retry(directory_fd);
+  if (!ok) {
+    unlink_same_inode(directory_fd, output->name, created);
+    fsync_retry(directory_fd);
   }
-  return parent_synced;
+  const bool directory_closed = close(directory_fd) == 0;
+  return ok && directory_closed;
 }
 
 std::optional<std::string_view> option(int argc, char** argv, std::string_view key) {
@@ -173,8 +207,11 @@ std::string nonce_entry_name(std::string_view audience, std::string_view nonce,
     material.push_back(static_cast<char>(expires_at >> shift));
   const auto digest = sd_jwt_zk::sha256_ascii(material);
   static constexpr char digits[] = "0123456789abcdef";
-  std::string name;
-  name.reserve(digest.size() * 2);
+  std::string name(16, '0');
+  for (std::size_t index = 0; index < 16; ++index)
+    name[index] = digits[(expires_at >> ((15 - index) * 4)) & 0x0f];
+  name.push_back('-');
+  name.reserve(17 + digest.size() * 2);
   for (const auto byte : digest) {
     name.push_back(digits[byte >> 4]);
     name.push_back(digits[byte & 0x0f]);
@@ -182,8 +219,51 @@ std::string nonce_entry_name(std::string_view audience, std::string_view nonce,
   return name;
 }
 
+std::optional<std::uint64_t> nonce_entry_expiry(std::string_view name) {
+  if (name.size() != 81 || name[16] != '-') return std::nullopt;
+  std::uint64_t expiry = 0;
+  for (std::size_t index = 0; index < 16; ++index) {
+    const auto digit = hex(name[index]);
+    if (!digit) return std::nullopt;
+    expiry = (expiry << 4) | *digit;
+  }
+  for (std::size_t index = 17; index < name.size(); ++index)
+    if (!hex(name[index])) return std::nullopt;
+  return expiry;
+}
+
+std::optional<std::size_t> collect_expired_nonces(int directory_fd,
+                                                   std::uint64_t now) {
+  const int scan_fd = dup(directory_fd);
+  if (scan_fd < 0) return std::nullopt;
+  DIR* directory = fdopendir(scan_fd);
+  if (!directory) { close(scan_fd); return std::nullopt; }
+  std::size_t active = 0;
+  errno = 0;
+  while (const auto* entry = readdir(directory)) {
+    const std::string_view name(entry->d_name);
+    if (name == "." || name == "..") continue;
+    const auto expiry = nonce_entry_expiry(name);
+    if (!expiry) { closedir(directory); return std::nullopt; }
+    if (*expiry < now) {
+      if (unlinkat(directory_fd, entry->d_name, 0) != 0 && errno != ENOENT) {
+        closedir(directory);
+        return std::nullopt;
+      }
+    } else {
+      ++active;
+      if (active > kMaxNonceEntries) { closedir(directory); return std::nullopt; }
+    }
+    errno = 0;
+  }
+  const bool read_ok = errno == 0;
+  const bool close_ok = closedir(directory) == 0;
+  return read_ok && close_ok ? std::optional{active} : std::nullopt;
+}
+
 bool consume_nonce(std::string_view path, std::string_view audience,
-                   std::string_view nonce, std::uint64_t expires_at) {
+                   std::string_view nonce, std::uint64_t expires_at,
+                   std::uint64_t now) {
   if (path.empty() || path.size() > 4096) return false;
   const std::string directory(path);
   if (mkdir(directory.c_str(), 0700) != 0 && errno != EEXIST) return false;
@@ -196,10 +276,18 @@ bool consume_nonce(std::string_view path, std::string_view audience,
     close(directory_fd);
     return false;
   }
+  if (flock(directory_fd, LOCK_EX) != 0) { close(directory_fd); return false; }
+  const auto active = collect_expired_nonces(directory_fd, now);
+  if (!active || *active >= kMaxNonceEntries) {
+    flock(directory_fd, LOCK_UN);
+    close(directory_fd);
+    return false;
+  }
   const auto name = nonce_entry_name(audience, nonce, expires_at);
   const int fd = openat(directory_fd, name.c_str(),
       O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
   if (fd < 0) {
+    flock(directory_fd, LOCK_UN);
     close(directory_fd);
     return false;
   }
@@ -212,34 +300,37 @@ bool consume_nonce(std::string_view path, std::string_view audience,
     if (sent <= 0) { ok = false; break; }
     offset += static_cast<std::size_t>(sent);
   }
-  ok = ok && fsync(fd) == 0;
+  ok = ok && fsync_retry(fd);
   ok = close(fd) == 0 && ok;
-  ok = ok && fsync(directory_fd) == 0;
+  ok = ok && fsync_retry(directory_fd);
   if (!ok) unlinkat(directory_fd, name.c_str(), 0);
+  const bool unlocked = flock(directory_fd, LOCK_UN) == 0;
   const bool directory_closed = close(directory_fd) == 0;
-  return ok && directory_closed;
+  return ok && unlocked && directory_closed;
 }
 
 class NonceFileReplay final : public sd_jwt_zk::FlatBearerReplayStoreV1 {
  public:
-  explicit NonceFileReplay(std::string_view path) : path_(path) {}
+  NonceFileReplay(std::string_view path, std::uint64_t now) : path_(path), now_(now) {}
   bool consume(std::string_view audience, std::string_view nonce,
                std::uint64_t expires_at) override {
-    return consume_nonce(path_, audience, nonce, expires_at);
+    return consume_nonce(path_, audience, nonce, expires_at, now_);
   }
  private:
   std::string path_;
+  std::uint64_t now_;
 };
 
 class HolderNonceFileReplay final : public sd_jwt_zk::HolderBoundReplayStoreV1 {
  public:
-  explicit HolderNonceFileReplay(std::string_view path) : path_(path) {}
+  HolderNonceFileReplay(std::string_view path, std::uint64_t now) : path_(path), now_(now) {}
   bool consume(std::string_view audience, std::string_view nonce,
                std::uint64_t expires_at) override {
-    return consume_nonce(path_, audience, nonce, expires_at);
+    return consume_nonce(path_, audience, nonce, expires_at, now_);
   }
  private:
   std::string path_;
+  std::uint64_t now_;
 };
 
 int challenge_create(int argc, char** argv) {
@@ -402,7 +493,7 @@ int verify(int argc, char** argv) {
   const auto request = sd_jwt_zk::decode_request(*request_bytes);
   const auto envelope = sd_jwt_zk::decode_envelope(*proof_bytes);
   if (!request || !envelope || request.value->identity.binding != sd_jwt_zk::Binding::bearer) return 2;
-  NonceFileReplay replay(*nonce_store);
+  NonceFileReplay replay(*nonce_store, *now);
   const auto verified = sd_jwt_zk::verify_flat_bearer_v1(*envelope.value, *request.value,
                                                           *now, replay);
   return verified && *verified.value ? 0 : 2;
@@ -420,7 +511,7 @@ int verify_holder(int argc, char** argv) {
   const auto request = sd_jwt_zk::decode_request(*request_bytes);
   const auto envelope = sd_jwt_zk::decode_holder_bound_envelope(*proof_bytes);
   if (!request || !envelope || request.value->identity.binding != sd_jwt_zk::Binding::holder_bound) return 2;
-  HolderNonceFileReplay replay(*nonce_store);
+  HolderNonceFileReplay replay(*nonce_store, *now);
   const auto verified = sd_jwt_zk::verify_holder_bound_v1(
       *envelope.value, sd_jwt_zk::holder_bound_verifier_policy_v1(*request.value),
       *now, replay);
@@ -435,16 +526,16 @@ int main(int argc, char** argv) {
   if (argc >= 2 && std::string_view(argv[1]) == "inspect") return inspect(argc - 1, argv + 1);
   if (argc >= 2 && std::string_view(argv[1]) == "prove") {
     const auto mode = option(argc - 1, argv + 1, "--mode");
-    if (mode && *mode != "bearer" && *mode != "holder") {
-      std::cerr << "prove: unsupported mode\n";
+    if (!mode || (*mode != "bearer" && *mode != "holder")) {
+      std::cerr << (mode ? "prove: unsupported mode\n" : "prove: mode is required\n");
       return 2;
     }
     return mode && *mode == "holder" ? prove_holder(argc - 1, argv + 1) : prove(argc - 1, argv + 1);
   }
   if (argc >= 2 && std::string_view(argv[1]) == "verify") {
     const auto mode = option(argc - 1, argv + 1, "--mode");
-    if (mode && *mode != "bearer" && *mode != "holder") {
-      std::cerr << "verify: unsupported mode\n";
+    if (!mode || (*mode != "bearer" && *mode != "holder")) {
+      std::cerr << (mode ? "verify: unsupported mode\n" : "verify: mode is required\n");
       return 2;
     }
     return mode && *mode == "holder" ? verify_holder(argc - 1, argv + 1) : verify(argc - 1, argv + 1);

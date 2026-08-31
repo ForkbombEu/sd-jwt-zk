@@ -35,6 +35,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(self.run_cli("verify", "--registry", "root").returncode, 2)
         self.assertEqual(self.run_cli("status-snapshot", "build").returncode, 2)
         for command in ("prove", "verify"):
+            missing = self.run_cli(command)
+            self.assertEqual(missing.returncode, 2)
+            self.assertIn("mode is required", missing.stderr)
             rejected = self.run_cli(command, "--mode", "registry")
             self.assertEqual(rejected.returncode, 2)
             self.assertIn("unsupported mode", rejected.stderr)
@@ -66,6 +69,17 @@ class CliTests(unittest.TestCase):
             self.assertEqual(self.run_cli("status-snapshot", "build", "--issuer-key-file", str(key_file),
                                           "--entries-file", str(entries), "--epoch", "7",
                                           "--valid-from", "1", "--valid-until", "9", "--out", str(output)).returncode, 2)
+            real_parent = root / "real-parent"
+            real_parent.mkdir()
+            linked_parent = root / "linked-parent"
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+            linked_output = linked_parent / "status"
+            result = self.run_cli(
+                "status-snapshot", "build", "--issuer-key-file", str(key_file),
+                "--entries-file", str(entries), "--epoch", "7",
+                "--valid-from", "1", "--valid-until", "9", "--out", str(linked_output))
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse((real_parent / "status").exists())
 
     def test_status_and_proof_file_inputs_reject_malformed_or_trailing_data(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -116,6 +130,15 @@ class CliTests(unittest.TestCase):
                 "--presentation-file", str(root / "presentation"),
                 "--issuer-key-file", str(root / "issuer.hex"), "--out", str(proof))
             self.assertEqual(proved.returncode, 0, proved.stderr)
+            missing_mode_proof = root / "missing-mode-proof"
+            missing_mode = self.run_cli(
+                "prove", "--challenge", str(root / "challenge"),
+                "--presentation-file", str(root / "presentation"),
+                "--issuer-key-file", str(root / "issuer.hex"),
+                "--out", str(missing_mode_proof))
+            self.assertEqual(missing_mode.returncode, 2)
+            self.assertIn("mode is required", missing_mode.stderr)
+            self.assertFalse(missing_mode_proof.exists())
             verified = self.run_cli(
                 "verify", "--mode", "holder", "--challenge", str(root / "challenge"),
                 "--proof-file", str(proof), "--nonce-store", str(nonce_store),
@@ -143,12 +166,34 @@ class CliTests(unittest.TestCase):
                 "--presentation-file", str(second / "presentation"),
                 "--issuer-key-file", str(second / "issuer.hex"), "--out", str(second_proof))
             self.assertEqual(proved.returncode, 0, proved.stderr)
+            missing_mode = self.run_cli(
+                "verify", "--challenge", str(second / "challenge"),
+                "--proof-file", str(second_proof), "--nonce-store", str(nonce_store),
+                "--now", "1777334400")
+            self.assertEqual(missing_mode.returncode, 2)
+            self.assertIn("mode is required", missing_mode.stderr)
+
+            expired = nonce_store / ("0000000000000001-" + "e" * 64)
+            expired.write_text("expired\n")
+            fillers = []
+            for index in range(4095):
+                name = f"ffffffffffffffff-{index:064x}"
+                filler = nonce_store / name
+                filler.write_text("active\n")
+                fillers.append(filler)
+            verified = self.run_cli(
+                "verify", "--mode", "holder", "--challenge", str(second / "challenge"),
+                "--proof-file", str(second_proof), "--nonce-store", str(nonce_store),
+                "--now", "1777334400")
+            self.assertEqual(verified.returncode, 2)
+            self.assertFalse(expired.exists())
+            fillers[-1].unlink()
             verified = self.run_cli(
                 "verify", "--mode", "holder", "--challenge", str(second / "challenge"),
                 "--proof-file", str(second_proof), "--nonce-store", str(nonce_store),
                 "--now", "1777334400")
             self.assertEqual(verified.returncode, 0, verified.stderr)
-            self.assertEqual(len(list(nonce_store.iterdir())), 2)
+            self.assertEqual(len(list(nonce_store.iterdir())), 4096)
 
 
 if __name__ == "__main__":

@@ -85,6 +85,11 @@ credential witness and is never accepted as a CLI argument or witness-file
 field. `verify` accepts the status component only when the verifier-selected
 challenge carries the matching local policy.
 
+`prove` and `verify` require an explicit `--mode bearer|holder`. The nonce
+store is an owner-only directory containing at most 4096 active entries.
+Verification removes entries whose encoded expiry is earlier than `--now` and
+fails closed if malformed entries remain or the active capacity is exhausted.
+
 The issuer key file is exactly 128 hexadecimal characters (`x || y`). Do not
 put private credentials, holder keys, or status witnesses in shell arguments,
 environment variables, logs, or challenge files.
