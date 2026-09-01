@@ -6,8 +6,8 @@ description: Reproduce prove and verify timings, proof sizes, and release artifa
 # Proof benchmarks
 
 The benchmark target runs the real production APIs for the three shipped proof
-families: exact-key bearer with local status, exact-key holder-bound, and local
-`VALID` status membership. It measures circuit construction where exposed,
+families: exact-key bearer with revocation, exact-key holder-bound, and a private
+proof of `VALID` revocation-list membership. It measures circuit construction where exposed,
 first proof generation, randomized repeat generation where exposed, and
 successful verification. Proof-component sizes and available circuit dimensions
 are recorded alongside the timings.
@@ -45,7 +45,7 @@ be invoked directly with `python3 scripts/run_benchmarks.py --help` when the
 three real-proof executables have already been built.
 
 `proof_bytes` is the aggregate proof payload carried by the corresponding API
-envelope. Component columns split presentation, credential, KB, and status
+envelope. Component columns split presentation, credential, KB, and revocation
 proof bytes where those components are independently framed.
 
 ## Published results

@@ -36,6 +36,10 @@ export default defineConfig({
   base,
   cleanUrls: true,
   lastUpdated: true,
+  srcExclude: [
+    // Experimental revocation-list operations stay in the repository but are not published.
+    '_drafts/**',
+  ],
   head: [
     ['meta', { name: 'theme-color', content: '#0f237c' }],
     ['meta', { property: 'og:type', content: 'website' }],
@@ -68,8 +72,9 @@ export default defineConfig({
         text: 'Integrate',
         items: [
           { text: 'Getting started', link: '/getting-started' },
-          { text: 'Wallet and verifier workflows', link: '/workflows' },
-          { text: 'Local status operations', link: '/status-operations' },
+          { text: 'Wallet and relying-party workflows', link: '/workflows' },
+          // Experimental: restore when revocation-list operations are ready for public use.
+          // { text: 'Revocation-list operations', link: '/status-operations' },
           { text: 'V1 API and identities', link: '/api' },
         ],
       },

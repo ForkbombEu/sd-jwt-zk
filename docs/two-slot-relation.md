@@ -18,7 +18,7 @@ parsing, circuit identity, and release evidence bounded.
 | Array slot | One scalar disclosure from a root array |
 | Hash algorithm | SHA-256 |
 | `_sd_alg` | Omitted, or exactly `sha-256`; omission still means SHA-256 |
-| Issuer trust | Exact verifier-selected P-256 key |
+| Issuer trust | Exact relying-party-selected P-256 key |
 | Serialization | Supported compact presentation shape |
 
 Both ordered disclosures enter the active presentation hash. The bounded parser

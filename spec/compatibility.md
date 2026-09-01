@@ -1,9 +1,9 @@
 # Compatibility matrix: restricted V1
 
 States: **MVP** is specified by `sd-jwt-zk-v1.md`; **later** needs a new circuit
-identity; **external** is a verifier policy outside the circuit; **unsupported**
+identity; **external** is a relying-party policy outside the circuit; **unsupported**
 is rejected. The flat MVP is **not Swiss-profile conformant**: Swiss requires
-arrays and recursive disclosures, which are later work, and status is staged.
+arrays and recursive disclosures, which are later work, and revocation is staged.
 
 | Wire feature and source anchor | State | Contract |
 |---|---|---|
@@ -23,8 +23,8 @@ arrays and recursive disclosures, which are later work, and status is staged.
 | Swiss claim disclosure rules / Swiss §3.2.2.2–§3.2.2.4 | later | full parser and recursive claim placement enforcement |
 | issuer exact key | MVP | public accepted P-256 issuer key, no `kid` |
 | issuer registry membership | MVP | public root; key/type/path remain private |
-| Token Status List / TSL §5.1–§8 | external | status is staged; V1 never asserts checked status |
+| Token Status List / TSL §5.1–§8 | external | revocation is staged; V1 never asserts that revocation was checked |
 | type metadata / SD-JWT VC §5 | external | authenticated retrieval and interpretation are local policy |
 
 No compatibility state above is a claim that an MVP presentation is Swiss
-conformant. A verifier must reject unsupported shapes before proving.
+conformant. A relying party must reject unsupported shapes before proving.

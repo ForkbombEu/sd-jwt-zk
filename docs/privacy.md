@@ -11,7 +11,7 @@ their own disclosure policy together.
 
 ## Public surfaces
 
-The verifier can observe:
+The relying party can observe:
 
 - disclosed scalar values;
 - bearer or holder-bound presentation family;
@@ -19,32 +19,32 @@ The verifier can observe:
 - exact issuer selection;
 - audience and purpose policy;
 - challenge context and time policy; and
-- status root and epoch when local status is required.
+- revocation root and epoch when a revocation check is required.
 
-Stable disclosed values can correlate sessions. A reused status root and epoch
+Stable disclosed values can correlate sessions. A reused revocation root and epoch
 places presentations in the same public cohort. Exact issuer selection and a
 specialized audience or purpose can narrow that cohort further.
 
-## Private status witness
+## Private revocation witness
 
-The status credential binding, Merkle leaf, private index, siblings, and path
+The revocation credential binding, Merkle leaf, private index, siblings, and path
 directions are not serialized. The proof exposes the selected root and a public
 presentation-bound bridge commitment, not those private Merkle coordinates.
 
 ## Replay is not unlinkability
 
-Fresh nonces prevent successful proof replay after the verifier atomically
+Fresh nonces prevent successful proof replay after the relying party atomically
 consumes the challenge. They do not erase disclosed values or other stable
 public statement fields. Bearer evidence is especially theft-sensitive until
-the intended verifier consumes its nonce.
+the intended relying party consumes its nonce.
 
 ## Deployment questions
 
 Before enabling a policy, decide:
 
 - whether both disclosed values are necessary for the decision;
-- how issuer, audience, purpose, and status cohorts combine;
-- how often status snapshots rotate and whether that cadence creates a useful
+- how issuer, audience, purpose, and revocation cohorts combine;
+- how often revocation-list snapshots rotate and whether that cadence creates a useful
   correlation handle; and
 - whether holder-bound mode is required for the threat model.
 

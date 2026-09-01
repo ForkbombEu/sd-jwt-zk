@@ -100,12 +100,13 @@ The palette behaves like a protocol diagram: blue establishes structure, navy es
 
 ### Primary
 
-- **Structural Blue:** The principal brand field for navigation, evidence sections, links, headings, and structural borders.
+- **Structural Blue:** The principal brand field for navigation, evidence sections, headings, and structural borders.
 - **Deep Navy:** The deepest protocol field, primary text color, and high-contrast ink for mint controls.
 
 ### Secondary
 
 - **Signal Mint:** Reserved for proof progress, active navigation, section rules, link underlines, focus outlines, and other semantically meaningful cues.
+- **Accessible Signal Green:** A darker mint-derived tone for link text on light reading surfaces. Signal Mint remains the link color on dark surfaces.
 
 ### Neutral
 
@@ -209,6 +210,30 @@ The signature rail is an ordered three-node sequence. Square mint number nodes s
 
 Evidence uses a ruled definition list; protocol stages use full-width ruled rows with a numbered index, owner and explanation, and an ArrowMark link. These patterns keep claim, source, and next action aligned without disguising them as generic feature cards.
 
+### Release Benchmarks
+
+The homepage benchmark field reads the latest release JSON at build time and
+retains the v1.0.0 release measurements as an offline fallback. A ruled
+operation table compares median wall time, raw sample range, and proof-envelope
+size for every shipped family. Horizontal timing rails share one scale;
+segmented artifact rails expose the presentation, credential, key-binding, and
+revocation components without implying that the observations are guarantees.
+
+The original Forkbomb Lottie animation lives in the benchmark introduction on
+the structural-blue field. It plays once when it enters the viewport, pauses
+while hidden or offscreen, and resolves immediately to its final frame under
+reduced motion. Timing rails animate once on entry while their numeric values
+remain visible before and during motion.
+
+### Closing Attribution
+
+The closing call to action keeps product guidance first and places the Dyne.org
+Longfellow-ZK attribution as a supporting column on its right. A single mint
+rule separates the relationship without turning it into a promotional card.
+The supplied Longfellow-ZK Europe artwork sits beneath the linked attribution,
+followed by a brief place-of-making caption. At narrow widths, the complete
+attribution follows the primary actions in the same DOM and reading order.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -225,4 +250,4 @@ Evidence uses a ruled definition list; protocol stages use full-width ruled rows
 - **Don't** use mint as a large decorative fill when it does not communicate a signal, state, or boundary.
 - **Don't** introduce rounded pills, soft centered shadows, gradient-filled controls, or generated-glyph arrows.
 - **Don't** let the Forkbomb expression watermark compete with headings or body copy.
-- **Don't** add raster imagery without recording its source and generation or licensing provenance; the current shipping system contains no raster assets.
+- **Don't** add raster imagery without recording its source and generation or licensing provenance in `docs/public/ASSETS.md`.

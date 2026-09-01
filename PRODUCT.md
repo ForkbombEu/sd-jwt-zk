@@ -17,8 +17,8 @@ equal starting point.
 
 SD-JWT ZK provides bounded presentation proofs for exact-key bearer and
 exact-key holder-bound credentials. It supports exactly two scalar disclosures
-and an optional private `VALID` membership proof against a verifier-selected
-local status snapshot. Success means that an integrator can select and verify
+and an optional private `VALID` membership proof against a relying-party-selected
+revocation-list snapshot. Success means that an integrator can select and verify
 the supported relation without mistaking cryptographic validity for application
 authorization, and that a reviewer can identify every public, private, and
 external responsibility.
@@ -27,16 +27,16 @@ external responsibility.
 
 The project deliberately exposes a small, fixed, fail-closed relation instead
 of a general anonymous-credential system: exact issuer keys, fixed disclosure
-shape, typed request builders, explicit transcript context, and optional local
-status are part of the product boundary.
+shape, typed request builders, explicit transcript context, and optional
+revocation checks are part of the product boundary.
 
 ## Operating Context
 
 Implementers build against an installed Longfellow package with CMake, construct
 typed V1 requests, and finish verification through `VerifyPresentation` with a
-durable replay store. Verifiers create canonical challenges from public policy
-and protected key/nonce files. Wallets keep credentials, holder keys, status
-indices, and Merkle paths out of command-line arguments and environment
+durable replay store. Relying parties create canonical challenges from public policy
+and protected key/nonce files. Wallets keep credentials, holder keys,
+revocation-list indices, and Merkle paths out of command-line arguments and environment
 variables.
 
 ## Capabilities and Constraints
@@ -44,8 +44,8 @@ variables.
 - Supported families are exact-key bearer and exact-key holder-bound.
 - The disclosure relation accepts one root-object scalar and one root-array
   scalar disclosure.
-- Local status, when required, proves private `VALID` membership under a
-  verifier-selected four-leaf snapshot.
+- A revocation check, when required, proves private `VALID` membership under a
+  relying-party-selected four-leaf snapshot.
 - `VerifyRelation` establishes only the cryptographic relation;
   `VerifyPresentation` adds policy and replay handling.
 - Issuer hiding, registries, recursive disclosure shapes, arbitrary disclosure
@@ -67,7 +67,7 @@ claims.
 
 - Product and integration boundary: `README.md` and
   `include/sd_jwt_zk/presentation.h`.
-- Normative protocol and status profiles: `spec/sd-jwt-zk-v1.md` and
+- Normative protocol and revocation profiles: `spec/sd-jwt-zk-v1.md` and
   `spec/local-status-v1.md`.
 - Protocol sequences, compatibility decisions, and locked references under
   `spec/`.

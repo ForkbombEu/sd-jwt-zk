@@ -2,6 +2,7 @@ import { h } from 'vue'
 import { useData } from 'vitepress'
 import type { Theme } from 'vitepress'
 import DefaultTheme from 'vitepress/theme-without-fonts'
+import CountryFlag from './components/CountryFlag.vue'
 import ForkbombBrand from './components/ForkbombBrand.vue'
 import ProductFooter from './components/ProductFooter.vue'
 import HomePage from './components/HomePage.vue'
@@ -10,6 +11,9 @@ import './style.css'
 
 export default {
   extends: DefaultTheme,
+  enhanceApp({ app }) {
+    app.component('CountryFlag', CountryFlag)
+  },
   Layout: () => {
     const { frontmatter } = useData()
 

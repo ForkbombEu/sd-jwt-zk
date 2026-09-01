@@ -10,24 +10,28 @@ description: Definitions for the bounded SD-JWT ZK V1 product boundary.
   holding bearer evidence may answer an unconsumed challenge.
 
 **Challenge**
-: Canonical verifier request bound into the proof transcript. It includes the
+: Canonical relying-party request bound into the proof transcript. It includes the
   selected mode, exact issuer key, audience, purpose, nonce, time window, claim
-  policy, circuit identity, and status policy.
+  policy, circuit identity, and revocation policy.
 
 **Circuit identity**
-: Versioned set of proof parameters and roles accepted by the verifier. A new
+: Versioned set of proof parameters and roles accepted by the relying party. A new
   disclosure shape or trust mode requires a new identity.
 
 **Exact key**
-: P-256 issuer public key selected by the verifier from local policy. A proof
+: P-256 issuer public key selected by the relying party from local policy. A proof
   cannot choose it.
 
 **Holder-bound presentation**
 : Exact-key credential relation plus the bounded compact KB-JWT relation and
   holder-key possession.
 
-**Local snapshot**
-: Verifier-selected four-entry status root and public metadata: issuer, epoch,
+**Holder**
+: Entity that controls a credential and can present it, directly or through a
+  wallet. The holder is not necessarily the subject identified by the credential.
+
+**Revocation-list snapshot**
+: Relying-party-selected four-entry revocation root and public metadata: issuer, epoch,
   and validity interval.
 
 **Presentation verification**
@@ -46,11 +50,20 @@ description: Definitions for the bounded SD-JWT ZK V1 product boundary.
 : Durable, atomic application-owned state that records successful nonce
   consumption.
 
-**Status bridge**
-: Public commitment that binds the separate private status proof to the same
+**Relying party**
+: Entity that creates the challenge, receives the presentation, checks it
+  against local policy, and relies on the result for its service or authorization
+  decision.
+
+**Revocation bridge**
+: Public commitment that binds the separate private revocation proof to the same
   credential and presentation context.
 
 **Witness**
 : Private material used to construct the proof, including credential inputs,
-  holder key material, and private status path data. It is not serialized in
+  holder key material, and private revocation-path data. It is not serialized in
   the public envelope.
+
+**Wallet**
+: Software acting for the holder to manage credential material and construct a
+  presentation. The wallet is not itself assumed to be the credential subject.

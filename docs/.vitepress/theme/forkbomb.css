@@ -14,6 +14,8 @@
     --fb-color-navy: #050d30;
     --fb-color-blue: #0f237c;
     --fb-color-mint: #2dd8a3;
+    --fb-color-link: #087f60;
+    --fb-color-link-hover: #065f48;
     --fb-color-white: #ffffff;
     --fb-color-cloud: #f7f7f7;
     --fb-color-mist: #eef1f5;
@@ -92,11 +94,13 @@
   :where(p) { max-inline-size: 72ch; }
 
   :where(a) {
-    color: var(--fb-color-blue);
+    color: var(--fb-color-link);
     text-decoration-color: var(--fb-color-mint);
     text-decoration-thickness: 0.1em;
     text-underline-offset: 0.2em;
   }
+
+  :where(a):hover { color: var(--fb-color-link-hover); }
 
   :where(a, button, summary, input, textarea, select):focus-visible {
     outline: 2px solid var(--fb-color-mint);

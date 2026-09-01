@@ -31,7 +31,7 @@ the exported target:
 
 ```cmake
 find_package(SDJWTZK CONFIG REQUIRED)
-target_link_libraries(your_verifier PRIVATE SDJWTZK::sd-jwt-zk)
+target_link_libraries(your_relying_party PRIVATE SDJWTZK::sd-jwt-zk)
 ```
 
 Include `sd_jwt_zk/presentation.h` for the product-facing V1 API. The source
@@ -47,7 +47,7 @@ the supported integration boundary.
 
 Both builders take a `PresentationPolicyV1`. The application supplies the
 exact issuer key, audience, purpose, nonce, time window, and either a
-status-forbidden or status-required policy. Audience and purpose are separate
+`status-forbidden` or `status-required` revocation policy. Audience and purpose are separate
 fields and are canonically bound into the request transcript.
 
 ## Finish at the application boundary
@@ -63,5 +63,5 @@ and [unsupported features](./unsupported.md). The project has not received an
 independent cryptographic audit.
 :::
 
-Continue with the [wallet and verifier workflows](./workflows.md) or inspect the
+Continue with the [wallet and relying-party workflows](./workflows.md) or inspect the
 [V1 API and identities](./api.md).

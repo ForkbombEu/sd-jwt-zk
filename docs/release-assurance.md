@@ -5,7 +5,7 @@ The machine-readable binding audit is
 structural resource record is
 [`spec/reduced-release-resources.json`](../spec/reduced-release-resources.json).
 Both cover only the fixed two-slot scalar bearer and holder-bound exact-key
-entry points and the optional separate locally trusted `VALID` status proof.
+entry points and the optional separate locally trusted `VALID` revocation proof.
 
 The release parser gate runs deterministic mutations over request, envelope and
 proof pre-parsing, compact JWS, base64url, bounded JSON, the exact-two disclosure

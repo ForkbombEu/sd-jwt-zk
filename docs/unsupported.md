@@ -29,8 +29,8 @@ negative tests, and release evidence.
 
 Unsupported version, component order, binding mode, trust mode, capacity,
 digest, field, rate, or query parameters reject. Bearer evidence cannot be
-submitted as a holder-bound envelope, and a status requirement cannot downgrade
-to status-forbidden behavior.
+submitted as a holder-bound envelope, and a revocation requirement cannot
+downgrade to `status-forbidden` behavior.
 
 ## Claims the project does not make
 

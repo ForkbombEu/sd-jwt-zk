@@ -16,4 +16,10 @@ related_targets: ["docs/.vitepress/theme/components/HomePage.vue"]
 - Constraints: exact inheritance from Forkbomb Vite Theme; preserve native VitePress search, navigation, responsive behavior, and accessibility; never imply an independent audit, broad interoperability, issuer hiding, recursive disclosures, arbitrary disclosure counts, or performance guarantees.
 - Chosen direction: a protocol journey from Challenge to Prove to Verify, with capability, privacy, and assurance evidence attached to the stage where it matters.
 - Memorable moment: the first viewport renders the three-stage protocol as a live mint signal moving through a bounded proof rail, making the product's fixed boundary visible before any prose explanation.
+- Release evidence: a later structural-blue field restores the original
+  Forkbomb Lottie and renders the latest tagged benchmark JSON as ruled timing
+  and proof-composition rails, with v1.0.0 as the offline build fallback.
+- Attribution: the final call to action credits the Dyne.org Longfellow-ZK
+  community version in a compact linked panel that stacks after the primary
+  actions on small screens.
 - Unresolved decisions: none.

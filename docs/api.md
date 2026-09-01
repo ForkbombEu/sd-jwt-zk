@@ -19,8 +19,8 @@ accepted bounded exact-key families; it is not a generic circuit factory.
 | `nonce` | Fresh replay challenge |
 | `time_min`, `time_max` | Accepted request window |
 | `issuer_key` | Exact accepted P-256 issuer key |
-| `status` | `forbidden` or `required` |
-| `trusted_snapshot` | Local snapshot policy when status is required |
+| `status` | Whether the revocation check is `forbidden` or `required` |
+| `trusted_snapshot` | Revocation-list snapshot policy when the check is required |
 
 The typed builders are `BuildBearerPresentationRequestV1` and
 `BuildHolderPresentationRequestV1`. Arbitrary proof identities are not
@@ -40,7 +40,7 @@ caller-supplied store, and returns exactly one closed result:
 | `expired` | The accepted time policy failed |
 | `replayed` | The nonce was already consumed |
 | `policy_denied` | Typed local policy rejected the presentation |
-| `status_required` | A required status component was absent or unacceptable |
+| `status_required` | A required revocation component was absent or unacceptable |
 | `verification_failed` | The cryptographic verification failed |
 
 Callers should handle every enum value. There is no success-like default.
@@ -48,7 +48,7 @@ Callers should handle every enum value. There is no success-like default.
 ## Accepted identities
 
 V1 accepts the exact-key bearer identity and the ordered holder credential/KB
-identity pair. Either may be paired with the canonical private local-status
+identity pair. Either may be paired with the canonical private revocation
 identity when the request requires it. Mode downgrade, component reordering,
 and proof-identity substitution reject.
 

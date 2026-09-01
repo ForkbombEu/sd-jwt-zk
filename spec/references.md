@@ -13,6 +13,6 @@ relation version, not advisory text.
 | Token Status List | [draft-ietf-oauth-status-list-20](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-status-list-20) | §5.1, §6, §7.1, §8 |
 
 The historical SD-JWT VC Draft 13 link is context only and is not an input.
-Network retrieval, type metadata, issuer keys, registry roots, and status
-snapshots are external verifier-policy inputs; their authenticity is not
+Network retrieval, type metadata, issuer keys, registry roots, and revocation
+snapshots are external inputs to relying-party policy; their authenticity is not
 established by this checked-in lock.

@@ -13,7 +13,7 @@ circuit_id = tag(circuit) || lp(protocol_version) || lp(binding) || lp(trust) ||
 transcript = tag(transcript) || SHA-256(statement) || SHA-256(circuit_id) || lp(proof_system_id) || lp(proof_system_public_input_encoding)
 ```
 
-`protocol_version` is ASCII `1`; `hash` is ASCII `sha-256`; `grammar` is ASCII `flat-restricted-json-1`. `mode`, `binding`, and `trust` are fixed ASCII tokens. The Fiat-Shamir challenge is the proof-system hash of `transcript`; a backend may not substitute raw JSON, a display string, or concatenation without `lp`. `statement` binds the verifier audience, fresh nonce, complete requested policy, its selected values/predicate results, time window, trust commitment, and status commitment. Thus a proof cannot be transplanted to another challenge or policy.
+`protocol_version` is ASCII `1`; `hash` is ASCII `sha-256`; `grammar` is ASCII `flat-restricted-json-1`. `mode`, `binding`, and `trust` are fixed ASCII tokens. The Fiat-Shamir challenge is the proof-system hash of `transcript`; a backend may not substitute raw JSON, a display string, or concatenation without `lp`. `statement` binds the relying-party audience, fresh nonce, complete requested policy, its selected values/predicate results, time window, trust commitment, and revocation commitment. Thus a proof cannot be transplanted to another challenge or policy.
 
 ## Fixed circuit families
 
@@ -33,30 +33,30 @@ Bearer proves possession of a credential witness only. Holder-bound additionally
 | Byte category | Classification | Destination / rationale |
 |---|---|---|
 | protocol version, circuit identity, mode, bucket | public | statement and proof envelope; family and capacity leak |
-| audience/domain, nonce, time bounds, requested policy, selected values/results | public | statement; intentional verifier authorization output |
+| audience/domain, nonce, time bounds, requested policy, selected values/results | public | statement; intentional relying-party authorization output |
 | exact issuer public key | public in exact-key; private in registry | exact-key trust input; registry witness/path |
 | registry root, epoch, depth | public | registry trust input |
-| status snapshot/root/epoch when enabled | public later | status trust context; V1 uses `status=staged` only |
+| revocation snapshot/root/epoch when enabled | public later | revocation trust context; V1 uses `status=staged` only |
 | issuer compact JWS bytes, protected/payload bytes, issuer signature | private | witness, authenticated but never envelope output |
 | disclosures, salts, digest list, disclosure ordering | private | witness; only policy result can emerge |
 | all undisclosed claims, `vct`, hidden registered claims | private | witness, except an explicitly requested policy result |
 | `cnf.jwk` coordinates and holder private key | private | holder-bound witness |
 | KB-JWT bytes/signature and private `sd_hash` | private | holder-bound witness |
 | registry leaf, issuer key, type, index, siblings, direction bits | private | registry witness |
-| status URI, index, status reference and path | external now; private later | V1 does not process status |
-| issuer key resolution, root distribution, status download, replay-store state | external | verifier policy, authenticated outside the proof |
+| revocation URI, index, reference and path | external now; private later | V1 does not process revocation |
+| issuer key resolution, root distribution, revocation data download, replay-store state | external | relying-party policy, authenticated outside the proof |
 
-Public output is exactly the policy result plus fresh challenge context (`audience`, `nonce`, verifier time/policy bounds and family/trust context). It never includes JWS bytes, a disclosure, salt, signature, `cnf`, KB-JWT, registry path, issuer identity in registry mode, or status index.
+Public output is exactly the policy result plus fresh challenge context (`audience`, `nonce`, relying-party time/policy bounds and family/trust context). It never includes JWS bytes, a disclosure, salt, signature, `cnf`, KB-JWT, registry path, issuer identity in registry mode, or revocation index.
 
 ## Disclosure and signature relation
 
 Both accepted `_sd_alg` forms are hash-bearing: omitted means `sha-256`; the only explicit form is `_sd_alg:"sha-256"`. For each object disclosure the private ASCII base64url disclosure `D` is constrained as `digest = base64url(SHA-256(ASCII(D)))`; no branch omits this SHA-256 gadget. The hidden issuer ES256 signing input authenticates the payload containing that digest. The holder-bound `sd_hash` similarly commits to the exact ASCII compact presentation including tildes and disclosed order. The initial grammar rejects arrays, recursion, decoys, duplicate names/digests and unused disclosures.
 
-## Verifier policy
+## Relying-party policy
 
-Before expensive verification, the verifier obtains the accepted exact key or authenticated registry root from local trust policy, selects one family and bucket, validates audience and a fresh high-entropy nonce, and requires `time_min <= now <= time_max`. It atomically consumes the nonce only after a successful proof; expiration, reuse, unsupported identity, wrong mode, unknown root/key, or unsatisfied policy rejects. The verifier must not trust a root, time limit, status snapshot, or replay state supplied only by the proof.
+Before expensive verification, the relying party obtains the accepted exact key or authenticated registry root from local trust policy, selects one family and bucket, validates audience and a fresh high-entropy nonce, and requires `time_min <= now <= time_max`. It atomically consumes the nonce only after a successful proof; expiration, reuse, unsupported identity, wrong mode, unknown root/key, or unsatisfied policy rejects. The relying party must not trust a root, time limit, revocation-list snapshot, or replay state supplied only by the proof.
 
-Status is deliberately staged: V1 returns no assertion that a credential is valid, unrevoked, or status-checked. A later status identity must bind an authenticated snapshot and still keep its reference/index private.
+Revocation is deliberately staged: V1 returns no assertion that a credential is unrevoked or that revocation was checked. A later revocation identity must bind an authenticated snapshot and still keep its reference/index private.
 
 ## Issuer authorization registry V1
 
@@ -64,7 +64,7 @@ Registry roots are locally authenticated trust inputs, never values chosen by a
 presentation.  A registry has an unsigned transport record containing `epoch`,
 `valid_from`, `valid_until`, fixed `depth`, and a 32-byte root.  Deployments
 authenticate that transport record (for example with their trust-list signing
-key) before giving it to the verifier; root download, signature verification,
+key) before giving it to the relying party; root download, signature verification,
 caching, and rollback protection are external policy.
 
 The canonical authorization record used for sorting is
@@ -95,7 +95,7 @@ The leaf's issuer coordinates, `vct`, interval, index, and path are private in
 registry proof families.  The circuit exposes only root, epoch, the root
 validity window, depth/capacity, and requested policy.  It proves that the
 complete public root window lies in the hidden authorization interval; the
-verifier separately requires its current time to lie in that root window and
+relying party separately requires its current time to lie in that root window and
 in the request window.  A public `vct` policy is permitted only when local
 governance authenticates a registry as single-VCT scoped; mixed or unscoped
 roots cannot satisfy that policy merely because the presentation names a VCT.
@@ -129,7 +129,7 @@ Safe inspection reports only `root_id`, epoch, public root window, fixed depth,
 capacity, and the locally configured authorization-count upper bound.  It
 never accepts a witness/path object and therefore cannot print issuer
 coordinates, leaf index, siblings, direction bits, private authorization
-interval, or hidden VCT.  It prints a public VCT only when the verifier policy
+interval, or hidden VCT.  It prints a public VCT only when the relying-party policy
 both requires that authenticated scope and explicitly enables inspection
 disclosure.  Small registries, scoped roots, and rare authorized types can
 still make the issuer linkable; the configured authorization count is an upper
@@ -137,4 +137,4 @@ bound on anonymity, not a promise that all entries are equally plausible.
 
 ## Privacy limits and leakage
 
-ZK hides witness bytes; it does not hide public policy. Claim by claim: a revealed selected value is disclosed; equality/range/set/predicate reveals its Boolean result; requested paths, their number, and policy shape reveal intent; absence/unsupported-shape rejection can reveal format facts. Audience/domain, nonce, timing, verifier identity, proof size, circuit family, capacity bucket, exact issuer key (in exact-key mode), registry root/epoch/depth (in registry mode), and later status cohort are linkable public metadata. Capacity buckets leak an upper bound on credential/disclosure size. A small registry or rare credential type can re-identify an issuer even though the key/path are private. Network, transport, IP address, verifier logging, root/status retrieval and a verifier reusing challenges can independently destroy unlinkability. Fresh proof randomness is required but cannot repair any of those disclosures.
+ZK hides witness bytes; it does not hide public policy. Claim by claim: a revealed selected value is disclosed; equality/range/set/predicate reveals its Boolean result; requested paths, their number, and policy shape reveal intent; absence/unsupported-shape rejection can reveal format facts. Audience/domain, nonce, timing, relying-party identity, proof size, circuit family, capacity bucket, exact issuer key (in exact-key mode), registry root/epoch/depth (in registry mode), and later revocation cohort are linkable public metadata. Capacity buckets leak an upper bound on credential/disclosure size. A small registry or rare credential type can re-identify an issuer even though the key/path are private. Network, transport, IP address, relying-party logging, root/revocation retrieval and a relying party reusing challenges can independently destroy unlinkability. Fresh proof randomness is required but cannot repair any of those disclosures.

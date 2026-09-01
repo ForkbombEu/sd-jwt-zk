@@ -36,7 +36,7 @@ const year = new Date().getFullYear()
 
     <div class="fb-container fb-footer__legal">
       <span>© {{ year }} The Forkbomb Company</span>
-      <span>Powered by Forkbomb Vite Theme</span>
+      <span>Powered by Dyne.org and Plan-₿</span>
     </div>
   </footer>
 </template>
