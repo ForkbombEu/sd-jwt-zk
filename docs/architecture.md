@@ -1,6 +1,6 @@
 ---
 title: Architecture
-description: Understand the parser, relation, policy, and CLI boundaries in SD-JWT ZK V1.
+description: Understand the parser, relation, policy, and CLI boundaries in SD-JWT ZK.
 ---
 
 # Architecture
@@ -17,7 +17,7 @@ the security boundary: native parsing is never an acceptance path by itself.
 | Relation layer | Constrain issuer signature, disclosures, claim policy, holder binding, and optional revocation | Issuer governance or authorization |
 | `VerifyRelation` | Verify the selected cryptographic relation and identity | Replay consumption or application policy |
 | `VerifyPresentation` | Add typed local policy and an application-owned replay store | The caller's final authorization decision |
-| CLI | Adapt protected files to the public V1 APIs | Authority from proof-supplied trust material |
+| CLI | Adapt protected files to the public APIs | Authority from proof-supplied trust material |
 
 ## Fail-closed dispatch
 

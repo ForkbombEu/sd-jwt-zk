@@ -20,10 +20,19 @@ integrating application or operator.
 | Circuit identity | Versioned accepted proof parameters and component order are fixed | New shapes require a new supported identity and release evidence |
 
 ::: danger Audit status
-This code has not received an independent cryptographic audit. The release gates
-provide implementation evidence; they are not a substitute for an audit or a
-guarantee of cryptographic security.
+This code has not received an independent cryptographic audit, only
+the Longfellow-ZK circuit builder and solver has. The release gates
+provide implementation evidence; they are not a substitute for an
+audit or a guarantee of cryptographic security.
 :::
+
+## Free without warranty
+
+This is free and open source software provided without warranty under
+the terms of the GNU GPL v3 license. Professional support,
+maintenance, integration services, and contractual warranty options
+are available separately. Please [contact us](mailto:info@forkbomb.eu)
+for further information.
 
 Read [release assurance](./release-assurance.md) for the exact automated gates
 and [privacy and linkability](./privacy.md) for information that remains public.

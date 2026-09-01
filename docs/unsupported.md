@@ -5,9 +5,9 @@ description: Know which identities, disclosure shapes, interoperability profiles
 
 # Unsupported features
 
-V1 is intentionally narrower than the experimental and historical material
-retained in the repository. The product API does not silently accept a broader
-shape when a supported check fails.
+This first release of SD-JWT ZK (V1) is intentionally narrow and the
+product API does not silently accept a broader shape when a supported
+check fails.
 
 ## Outside the product boundary
 
@@ -15,7 +15,7 @@ shape when a supported check fails.
 | --- | --- |
 | Issuer privacy | Issuer hiding, issuer registries, and aggregate registries |
 | Disclosure shape | Recursive or nested disclosures, arbitrary counts, decoy digests, and additional slots |
-| Interoperability | Swiss-profile or swiyu interoperability claims |
+| Interoperability | EUDI or Swiss-profile interoperability claims |
 | Circuit families | The retained 32-slot experiment and recursive proof composition |
 | Serialization | Unsupported identities or presentation-mode downgrade |
 | Assurance | Unmeasured timing or resource guarantees, and external conformance guarantees |
@@ -34,10 +34,15 @@ downgrade to `status-forbidden` behavior.
 
 ## Claims the project does not make
 
-The project has not received an independent cryptographic audit. Benchmark
-results describe a recorded machine and toolchain; they are not latency,
-throughput, or memory promises. V1 also makes no issuer-hiding, aggregate
-anonymity, forward-secrecy, or general unlinkability claim.
+The project has not received an independent cryptographic audit, only
+the Longfellow-ZK circuit builder and solver has. V1 also makes no
+issuer-hiding, aggregate anonymity, forward-secrecy, or general
+unlinkability claim.
 
-If your deployment needs any item on this page, treat it as a different product
-requirement rather than an integration flag.
+## Free without warranty
+
+This is free and open source software provided without warranty under
+the terms of the GNU GPL v3 license. Professional support,
+maintenance, integration services, and contractual warranty options
+are available separately. Please [contact us](mailto:info@forkbomb.eu)
+for further information.

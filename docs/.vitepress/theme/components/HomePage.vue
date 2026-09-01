@@ -4,6 +4,7 @@ import { withBase } from 'vitepress'
 import { data as benchmarks } from '../benchmarks.data'
 import ArrowMark from './ArrowMark.vue'
 import ForkbombAnimation from './ForkbombAnimation.vue'
+import WarrantyNotice from './WarrantyNotice.vue'
 
 const benchmarkSection = ref<HTMLElement>()
 const benchmarksVisible = ref(false)
@@ -259,6 +260,15 @@ const steps = [
       <div class="fb-container">
         <div class="sdjwt-section-heading">
           <h2 id="paths-title">Choose the path that matches your work.</h2>
+          <img
+            class="sdjwt-paths__mark"
+            :src="withBase('/dyne-black-transparent-icon.svg')"
+            alt=""
+            width="300"
+            height="300"
+            loading="lazy"
+            decoding="async"
+          >
         </div>
         <div class="sdjwt-paths__grid">
           <article>
@@ -325,7 +335,7 @@ const steps = [
               decoding="async"
             >
             <span>
-              <strong>Powered by the European Longfellow-ZK community version maintained by the Dyne.org foundation</strong>
+              <strong>Powered by the Longfellow-ZK community fork</strong>
               <span>Explore Longfellow-ZK <ArrowMark /></span>
             </span>
           </a>
@@ -343,12 +353,14 @@ const steps = [
             </a>
             <figcaption>
               Made with &hearts; in Europe <CountryFlag code="eu" label="European Union" />
-              <br>with support by <a href="https://pacesetters.eu">PACESETTERS</a> (EU Horizon grant 101132610)
+              <br>with support by <a href="https://pacesetters.eu">PACESETTERS</a> (EU grant 101132610)
               <br>and the <a href="https://plan-b.foundation">Plan-₿ Foundation</a> in Lugano <CountryFlag code="ch" label="Switzerland" />
             </figcaption>
           </figure>
         </div>
       </div>
     </section>
+
+    <WarrantyNotice home />
   </main>
 </template>

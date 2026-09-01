@@ -63,5 +63,7 @@ and [unsupported features](./unsupported.md). The project has not received an
 independent cryptographic audit.
 :::
 
+<WarrantyNotice />
+
 Continue with the [wallet and relying-party workflows](./workflows.md) or inspect the
 [V1 API and identities](./api.md).

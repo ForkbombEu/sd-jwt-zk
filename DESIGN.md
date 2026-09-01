@@ -210,6 +210,10 @@ The signature rail is an ordered three-node sequence. Square mint number nodes s
 
 Evidence uses a ruled definition list; protocol stages use full-width ruled rows with a numbered index, owner and explanation, and an ArrowMark link. These patterns keep claim, source, and next action aligned without disguising them as generic feature cards.
 
+The work-path section pairs its balanced statement with the black Dyne.org icon
+in a compact right-hand track on wide screens. The decorative mark disappears
+when the section collapses to one column so the heading keeps its reading measure.
+
 ### Release Benchmarks
 
 The homepage benchmark field reads the latest release JSON at build time and
@@ -233,6 +237,15 @@ rule separates the relationship without turning it into a promotional card.
 The supplied Longfellow-ZK Europe artwork sits beneath the linked attribution,
 followed by a brief place-of-making caption. At narrow widths, the complete
 attribution follows the primary actions in the same DOM and reading order.
+
+### Warranty and Support Notice
+
+A reusable ruled notice states the GPL v3 warranty boundary and the separate
+availability of professional support. It appears at the end of the two primary
+integration guides and as a compact light section between the homepage closing
+field and global footer. The official red GPLv3 mark sits beneath the heading in
+the left column. The contact phrase is the only action and links directly to the
+professional-support email address.
 
 ## Do's and Don'ts
 

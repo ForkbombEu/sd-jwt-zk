@@ -1,13 +1,14 @@
 ---
 title: Fixed two-slot relation
-description: Understand the exact disclosure shape accepted by the V1 product API.
+description: Understand the exact disclosure shape accepted by the product API.
 ---
 
 # Fixed two-slot relation
 
-V1 accepts one disclosure shape: exactly two scalar openings, ordered as one
-root-object disclosure and one root-array disclosure. The fixed shape keeps
-parsing, circuit identity, and release evidence bounded.
+This first release (V1) accepts only one disclosure shape: exactly two
+scalar openings, ordered as one root-object disclosure and one
+root-array disclosure. The fixed shape keeps parsing, circuit
+identity, and release evidence bounded.
 
 ## Constraints
 

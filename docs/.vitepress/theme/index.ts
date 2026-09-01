@@ -6,6 +6,7 @@ import CountryFlag from './components/CountryFlag.vue'
 import ForkbombBrand from './components/ForkbombBrand.vue'
 import ProductFooter from './components/ProductFooter.vue'
 import HomePage from './components/HomePage.vue'
+import WarrantyNotice from './components/WarrantyNotice.vue'
 import './forkbomb.css'
 import './style.css'
 
@@ -13,6 +14,7 @@ export default {
   extends: DefaultTheme,
   enhanceApp({ app }) {
     app.component('CountryFlag', CountryFlag)
+    app.component('WarrantyNotice', WarrantyNotice)
   },
   Layout: () => {
     const { frontmatter } = useData()

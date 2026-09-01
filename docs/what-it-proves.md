@@ -1,11 +1,11 @@
 ---
-title: What V1 proves
+title: What SD-JWT ZK proves
 description: Separate the bounded cryptographic statement from application policy and operational trust.
 ---
 
-# What V1 proves
+# What SD-JWT ZK proves
 
-An accepted V1 presentation establishes a deliberately small cryptographic
+An accepted SD-JWT ZK presentation establishes a deliberately small cryptographic
 statement. It does not make a general authorization decision and it does not
 turn SD-JWT into an unrestricted anonymous-credential system.
 

@@ -35,5 +35,5 @@ compatibility material does not make it part of the V1 product. The supported
 surface is the fixed two-slot scalar exact-key bearer and holder-bound entry
 points, optionally paired with a private `VALID` revocation check.
 
-Start with [what V1 proves](./what-it-proves.md), then use the normative sources
+Start with [what SD-JWT ZK proves](./what-it-proves.md), then use the normative sources
 for protocol-level review.

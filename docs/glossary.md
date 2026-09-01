@@ -1,6 +1,6 @@
 ---
 title: Glossary
-description: Definitions for the bounded SD-JWT ZK V1 product boundary.
+description: Definitions for the bounded SD-JWT ZK product boundary.
 ---
 
 # Glossary

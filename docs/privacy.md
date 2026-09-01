@@ -48,6 +48,6 @@ Before enabling a policy, decide:
   correlation handle; and
 - whether holder-bound mode is required for the threat model.
 
-V1 does not claim issuer hiding, aggregate anonymity, or general-purpose
+SD-JWT ZK does not claim issuer hiding, aggregate anonymity, or general-purpose
 unlinkability. See [unsupported features](./unsupported.md) and the [security
 claim matrix](./security-claims.md).
