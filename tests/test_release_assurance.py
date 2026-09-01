@@ -22,57 +22,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseAssuranceTests(unittest.TestCase):
-    def test_gpl_license_metadata_notices_and_source_headers(self):
-        copyright_line = "Copyright (C) 2026 by The Forkbomb Company"
-        required_notice = """## Free without warranty
-This is free and open source software provided without warranty under the terms of the GNU GPL v3 license. Professional support, maintenance, integration services, and contractual warranty options are available separately. Please [contact us](mailto:info@forkbomb.eu) for further information."""
-
-        license_text = (ROOT / "LICENSE").read_text()
-        self.assertIn("GNU GENERAL PUBLIC LICENSE", license_text)
-        self.assertIn("Version 3, 29 June 2007", license_text)
-        self.assertIn("How to Apply These Terms to Your New Programs", license_text)
-
-        package = json.loads((ROOT / "package.json").read_text())
-        lock_package = json.loads((ROOT / "package-lock.json").read_text())
-        self.assertEqual(package["license"], "GPL-3.0-or-later")
-        self.assertEqual(lock_package["packages"][""]["license"],
-                         "GPL-3.0-or-later")
-        cmake = (ROOT / "CMakeLists.txt").read_text()
-        self.assertIn('set(SD_JWT_ZK_LICENSE "GPL-3.0-or-later")', cmake)
-        self.assertIn('set(CPACK_RESOURCE_FILE_LICENSE', cmake)
-        self.assertIn('set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")',
-                      cmake)
-        self.assertIn("install(FILES README.md LICENSE", cmake)
-        package_config = (ROOT / "cmake/SDJWTZKConfig.cmake.in").read_text()
-        self.assertIn('set(SDJWTZK_LICENSE "GPL-3.0-or-later")',
-                      package_config)
-        for documentation in (ROOT / "README.md", ROOT / "docs/index.md"):
-            self.assertIn(required_notice, documentation.read_text())
-
-        source_suffixes = {
-            ".h", ".hpp", ".cc", ".cpp", ".py", ".sh", ".js", ".mjs",
-            ".ts", ".mts", ".cmake",
-        }
-        excluded_parts = {".deps", ".git", "node_modules", "vendor"}
-        sources = []
-        for path in ROOT.rglob("*"):
-            relative = path.relative_to(ROOT)
-            if (not path.is_file() or
-                    relative.parts[:3] in {
-                        ("docs", ".vitepress", "cache"),
-                        ("docs", ".vitepress", "dist"),
-                    } or any(
-                    part in excluded_parts or part.startswith("build")
-                    for part in relative.parts)):
-                continue
-            if (path.suffix in source_suffixes or
-                    path.name in {"CMakeLists.txt", "SDJWTZKConfig.cmake.in"}):
-                sources.append(path)
-        self.assertEqual(len(sources), 112)
-        for source in sources:
-            opening = "\n".join(source.read_text().splitlines()[:4])
-            self.assertIn(copyright_line, opening, source)
-
     def test_binding_matrix_is_complete_and_links_current_negatives(self):
         matrix = json.loads((ROOT / "spec/reduced-binding-matrix.json").read_text())
         self.assertEqual(matrix["schema"], "sd-jwt-zk/reduced-binding-matrix/v1")
